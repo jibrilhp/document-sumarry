@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16  # Official image with pgvector pre-installed
+    container_name: document_pg_vector
+    environment:
+      POSTGRES_USER: admin          # Set your PostgreSQL username
+      POSTGRES_PASSWORD: password   # Set your PostgreSQL password
+      POSTGRES_DB: mydatabase       # Set your default database name
+    ports:
+      - "5432:5432"                 # Expose PostgreSQL on port 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data  # Mount volume for data persistence
+
+volumes:
+  pgdata:
+    driver: local
