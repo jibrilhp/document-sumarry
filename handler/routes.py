@@ -1,4 +1,4 @@
-from flask import current_app, request, jsonify
+from flask import current_app, request, jsonify, Response
 from usecase.document import DocumentUsecase
 from entity.document import Document, DocumentDb, Chat
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
@@ -68,14 +68,22 @@ class Routes:
             
         @current_app.route("/v1/chat", methods=["POST"])
         def chat_generation():
-            req = request.get_json()
-            if not req:
-                return jsonify({"error": "empty request"}), 400
-            user_chat = req["chat"]
-            chat = Chat(chat=user_chat)
-            result = self.document_usecase.chat_generation(chat=chat)
-            print(result)
-            return jsonify({"message": result})
+            try:
+                req = request.get_json()
+                if not req:
+                    return jsonify({"error": "empty request"}), 400
+                user_chat: str = req["chat"]
+                is_stream: bool = req["is_stream"]
+                chat = Chat(chat=user_chat, is_stream=is_stream)
+                if chat.is_stream:
+                    return Response(
+                        response=self.document_usecase.stream_chat_generation(chat=chat),
+                        content_type="text/plain"
+                    )
+                result = self.document_usecase.chat_generation(chat=chat)
+                return jsonify({"message": result})
+            except Exception:
+                return jsonify({"error": "please try again later"}), 500
             
         @current_app.route("/")
         def index():

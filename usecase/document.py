@@ -45,3 +45,7 @@ class DocumentUsecase:
     def chat_generation(self, chat: Chat):
         similiar_documents =  self.document_repository.find_relevant_document(chat=chat)
         return self.ollama_adapter.generate_chat_response(chat=chat, similiar_documents=similiar_documents)
+    
+    def stream_chat_generation(self, chat: Chat):
+        similiar_documents = self.document_repository.find_relevant_document(chat=chat)
+        return self.ollama_adapter.generate_streamable_chat_response(chat=chat, similiar_documents=similiar_documents)

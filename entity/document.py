@@ -27,6 +27,7 @@ class DocumentDb(object):
         self.updated_at = updated_at
 
 class Chat(object):
-    def __init__(self, chat: str):
+    def __init__(self, chat: str, is_stream: bool):
         self.timestamp = time()
         self.chat = chat
+        self.is_stream = is_stream
