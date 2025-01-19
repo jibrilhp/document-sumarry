@@ -1,7 +1,9 @@
 from flask import current_app
 import psycopg2
-import uuid
-from entity.document import Document
+from langchain_postgres import PGVector
+from langchain_postgres.vectorstores import PGVector
+from langchain_core.embeddings import Embeddings
+from typing import List
 
 class PostgresAdapter:
     def __init__(self):
@@ -24,3 +26,21 @@ class PostgresAdapter:
     def close(self):
         self.cursor.close()
         self.connection.close()
+
+class PGVectorAdapter:
+    def __init__(self, embedding: Embeddings):
+        self._connection = "postgresql+psycopg://{}:{}@{}:{}/{}".format(
+            current_app.config["DB_USER"],
+            current_app.config["DB_PASSWORD"],
+            current_app.config["DB_HOST"],
+            current_app.config["DB_PORT"],
+            current_app.config["DB_NAME"]
+        )
+        current_app.logger.info(self._connection)
+        self.vector_store = PGVector(
+            embeddings=embedding,
+            collection_name=current_app.config["COLLECTION_NAME"],
+            connection=self._connection,
+            use_jsonb=True
+        )
+        current_app.logger.info("pg vector ready")

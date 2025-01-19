@@ -1,4 +1,4 @@
-from repository.postgres import PostgresAdapter
+from repository.postgres import PostgresAdapter, PGVectorAdapter
 from entity.document import Document, DocumentDb
 from time import time
 from flask import current_app
@@ -6,13 +6,15 @@ from uuid import uuid5, NAMESPACE_X500
 from psycopg2.errors import UniqueViolation
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
 from typing import List
+from langchain_core.documents import Document as LangchaincoreDocument
 
 
 class DocumentRepository:
-    def __init__(self, db: PostgresAdapter):
+    def __init__(self, db: PostgresAdapter, pgvector: PGVectorAdapter):
         self.app = current_app
         self.cursor = db.get_cursor()
         self.connection = db.get_connection()
+        self.vector_store = pgvector
 
     def get_documents(self) -> List[DocumentDb]:
         sql = "select uuid, document_name, is_processed, document_type, created_at, updated_at from documents"
@@ -34,7 +36,6 @@ class DocumentRepository:
         data = (document.uuid,)
         self.cursor.execute(sql, data)
         results = self.cursor.fetchall()
-        print(results)
         if results.__len__() == 0:
             e = ResourceNotFound("document not found")
             self.app.logger.error(str(e))
@@ -63,6 +64,17 @@ class DocumentRepository:
             self.connection.rollback()
             raise DatabaseError("please try again later")
         
+    def update_document(self, document: DocumentDb):
+        sql = "update documents set is_processed = %s, updated_at = %s where uuid = %s"
+        data = (document.is_processed, time(), document.uuid)
+        try:
+            self.cursor.execute(query=sql, vars=data)
+            self.connection.commit()
+        except Exception as e:
+            self.app.logger.error(str(e))
+            self.connection.rollback()
+            raise DatabaseError("please try again later")
+        
     def delete_document(self, document: DocumentDb):
         sql = "DELETE FROM documents WHERE uuid = %s"
         data = (document.uuid,)
@@ -74,3 +86,10 @@ class DocumentRepository:
             self.connection.rollback()
             self.app.logger.error(e)
             raise DatabaseError("please try again later")
+        
+    def add_documents_to_vector_store(self, documents: List[LangchaincoreDocument]) -> List[str]:
+        try:
+            ids = self.vector_store.vector_store.add_documents(documents=documents)
+            return ids
+        except ValueError:
+            return list<str>()

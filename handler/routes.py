@@ -50,6 +50,21 @@ class Routes:
                 return jsonify({"error": str(e)}), 404
             except DatabaseError:
                 return jsonify({"error": "please try again later"})
+            
+        @current_app.route("/v1/vector", methods=["POST"])
+        async def vector_document():
+            try:
+                req = request.get_json()
+                if not req:
+                    return jsonify({"error": "empty request"}), 400
+                document_uuid = req["uuid"]
+                document = DocumentDb(uuid=document_uuid)
+                await self.document_usecase.document_vectorization(document=document)
+                return jsonify({"message":"document with {} vectorization is completed".format(document_uuid)})
+            except ResourceNotFound as e:
+                return jsonify({"error": str(e)}), 404
+            except DatabaseError:
+                return jsonify({"error": "please try again later"})
 
         @current_app.route("/")
         def index():
