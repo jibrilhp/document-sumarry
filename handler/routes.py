@@ -84,6 +84,21 @@ class Routes:
                 return jsonify({"message": result})
             except Exception:
                 return jsonify({"error": "please try again later"}), 500
+        
+        @current_app.route("/v1/summarize", methods=["POST"])
+        async def summarize_document():
+            try:
+                file = request.files["document"]
+                self.app.logger.info("receive document {}".format(file.filename))
+                document = Document(file=file)
+                response = await self.document_usecase.summarize_document(document=document)
+                return Response(
+                    response=response,
+                    content_type="text/plain"
+                )
+            except KeyError:
+                bad_request = {"error": "filename not found"}
+                return jsonify(bad_request), 400
             
         @current_app.route("/")
         def index():

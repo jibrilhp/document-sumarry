@@ -4,6 +4,7 @@ from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
 from langchain_core.embeddings import Embeddings
 from typing import List
+from langchain_community.vectorstores import InMemoryVectorStore
 
 class PostgresAdapter:
     def __init__(self):
@@ -44,3 +45,8 @@ class PGVectorAdapter:
             use_jsonb=True
         )
         current_app.logger.info("pg vector ready")
+
+
+class InMemoryVector:
+    def __init__(self, embedding: Embeddings):
+        self.in_memory_vector_store = InMemoryVectorStore(embedding=embedding)
