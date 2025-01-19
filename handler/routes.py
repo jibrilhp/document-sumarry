@@ -1,6 +1,6 @@
 from flask import current_app, request, jsonify
 from usecase.document import DocumentUsecase
-from entity.document import Document, DocumentDb
+from entity.document import Document, DocumentDb, Chat
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
 
 
@@ -65,7 +65,18 @@ class Routes:
                 return jsonify({"error": str(e)}), 404
             except DatabaseError:
                 return jsonify({"error": "please try again later"})
-
+            
+        @current_app.route("/v1/chat", methods=["POST"])
+        def chat_generation():
+            req = request.get_json()
+            if not req:
+                return jsonify({"error": "empty request"}), 400
+            user_chat = req["chat"]
+            chat = Chat(chat=user_chat)
+            result = self.document_usecase.chat_generation(chat=chat)
+            print(result)
+            return jsonify({"message": result})
+            
         @current_app.route("/")
         def index():
             return "<p>welcome to document summarisation tools</p>"

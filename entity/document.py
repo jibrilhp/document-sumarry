@@ -1,6 +1,7 @@
 from werkzeug.datastructures import FileStorage
 from static.enum import FileType
 from error.error import UnknownFileType
+from time import time
 
 class Document:
     def __init__(self, file: FileStorage):
@@ -24,3 +25,8 @@ class DocumentDb(object):
         self.document_type = document_type
         self.created_at = created_at
         self.updated_at = updated_at
+
+class Chat(object):
+    def __init__(self, chat: str):
+        self.timestamp = time()
+        self.chat = chat

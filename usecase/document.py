@@ -1,14 +1,16 @@
 from repository.document import DocumentRepository
 from repository.storage import StorageRepository
-from entity.document import Document, DocumentDb
+from repository.ollama import OllamaAdapter
+from entity.document import Document, DocumentDb, Chat
 from flask import current_app
 from typing import List
 from static.enum import FileType
 
 class DocumentUsecase:
-    def __init__(self, document_repository: DocumentRepository, storage_repository: StorageRepository):
+    def __init__(self, document_repository: DocumentRepository, storage_repository: StorageRepository, ollama_adapter: OllamaAdapter):
         self.document_repository = document_repository
         self.storage_repository = storage_repository
+        self.ollama_adapter = ollama_adapter
         self.app = current_app
 
     def store_document(self, document: Document):
@@ -39,4 +41,7 @@ class DocumentUsecase:
             document_from_db.is_processed = True
             self.document_repository.update_document(document=document_from_db)
             return
-
+        
+    def chat_generation(self, chat: Chat):
+        similiar_documents =  self.document_repository.find_relevant_document(chat=chat)
+        return self.ollama_adapter.generate_chat_response(chat=chat, similiar_documents=similiar_documents)

@@ -1,5 +1,5 @@
 from repository.postgres import PostgresAdapter, PGVectorAdapter
-from entity.document import Document, DocumentDb
+from entity.document import Document, DocumentDb, Chat
 from time import time
 from flask import current_app
 from uuid import uuid5, NAMESPACE_X500
@@ -93,3 +93,9 @@ class DocumentRepository:
             return ids
         except ValueError:
             return list<str>()
+        
+    def find_relevant_document(self, chat: Chat):
+        query = chat.chat
+        similiar_documents = self.vector_store.vector_store.similarity_search(query=query, k=3)
+        return similiar_documents
+    

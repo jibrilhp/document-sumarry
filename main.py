@@ -18,6 +18,6 @@ if __name__ == "__main__":
         postgres_adapter = PostgresAdapter()
         documentRepository = DocumentRepository(db=postgres_adapter, pgvector=pg_vector_adapter)
         storage_repository = StorageRepository()
-        document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository)
+        document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=ollama_adapter)
         routes = Routes(document_usecase=document_usecase)
     app.run(debug=True)
