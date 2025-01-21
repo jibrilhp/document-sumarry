@@ -1,6 +1,17 @@
 version: "3.8"
 
 services:
+  document-summarisation-tools:
+    container_name: dst-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    networks:
+      - dst-networks
   postgres:
     image: pgvector/pgvector:pg16  # Official image with pgvector pre-installed
     container_name: document_pg_vector
@@ -12,7 +23,12 @@ services:
       - "5432:5432"                 # Expose PostgreSQL on port 5432
     volumes:
       - pgdata:/var/lib/postgresql/data  # Mount volume for data persistence
+    networks:
+      - dst-networks
 
 volumes:
   pgdata:
     driver: local
+
+networks:
+  dst-networks:
