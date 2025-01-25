@@ -17,9 +17,10 @@ class DocumentRepository:
         self.pg_vector_store = pgvector
         self.inmmeory_vector_store = inmemory_vector
 
-    def get_documents(self) -> List[DocumentDb]:
-        sql = "select uuid, document_name, is_processed, document_type, created_at, updated_at from documents"
-        self.cursor.execute(sql)
+    def get_documents(self, documentDb: DocumentDb) -> List[DocumentDb]:
+        sql = "select uuid, document_name, is_processed, document_type_id, created_at, updated_at from documents where tenant_id = %s"
+        data = (documentDb.tenant_id,)
+        self.cursor.execute(sql, vars=data)
         results = self.cursor.fetchall()
         documents: List[DocumentDb] = list()
         for row in results:
@@ -33,35 +34,37 @@ class DocumentRepository:
         return documents
     
     def get_document(self, document: DocumentDb)-> DocumentDb:
-        sql = "select uuid, document_name, is_processed, document_type, created_at, updated_at from documents where uuid = %s limit 1"
-        data = (document.uuid,)
+        sql = "select uuid, document_name, is_processed, document_type_id, created_at, updated_at, tenant_id, projects_uuid from documents where uuid = %s AND tenant_id = %s limit 1"
+        data = (document.uuid,document.tenant_id)
+        self.app.logger.info("get document with where {} {}".format( document.uuid, document.tenant_id))
         self.cursor.execute(sql, data)
         results = self.cursor.fetchall()
         if results.__len__() == 0:
-            e = ResourceNotFound("document not found")
-            self.app.logger.error(str(e))
-            raise ResourceNotFound("document not found")
+            raise ResourceNotFound("resource not found")
         for row in results:
-            uuid, document_name, is_processed, document_type, created_at, updated_at = row
+            uuid, document_name, is_processed, document_type, created_at, updated_at, tenant_id, project_uuid = row
             document = DocumentDb(
                 uuid=uuid, document_name=document_name, is_processed=is_processed,
                 document_type=document_type, created_at=created_at, updated_at=updated_at
             )
+            document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
             return document
 
     def store_document(self, document: Document):
-        sql = "INSERT INTO documents(uuid, document_name, is_processed, document_type, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s);"
+        sql = "INSERT INTO documents(uuid, document_name, is_processed, document_type_id, created_at, updated_at, projects_uuid, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"
         data = (
-           uuid5(NAMESPACE_X500, document.file.filename).__str__() , document.file.filename, False, document.file_type, time(), time()
+           uuid5(NAMESPACE_X500, document.file.filename).__str__() , document.file.filename, False, document.file_type, time(), time(), document.project_uuid, document.tenant_id
         )
         try:
             self.cursor.execute(query=sql, vars=data)
             self.connection.commit()
             self.app.logger.info("document {} is stored into db".format(document.file.filename))
-        except UniqueViolation:
+        except UniqueViolation as e:
+            self.app.logger.error(str(e))
             self.connection.rollback()
             raise FileConflictDb("{} already exist in database".format(document.file.filename))
-        except Exception:
+        except Exception as e:
+            self.app.logger.error(str(e))
             self.connection.rollback()
             raise DatabaseError("please try again later")
         
@@ -77,13 +80,14 @@ class DocumentRepository:
             raise DatabaseError("please try again later")
         
     def delete_document(self, document: DocumentDb):
-        sql = "DELETE FROM documents WHERE uuid = %s"
-        data = (document.uuid,)
-        self.app.logger.info("deleting document with uuid: {}".format(document.uuid))
+        sql = "DELETE FROM documents WHERE uuid = %s AND tenant_id = %s"
+        data = (document.uuid,document.tenant_id)
+        self.app.logger.info("delete document with where {} {}".format(document.uuid, document.tenant_id))
         try:
             self.cursor.execute(query=sql, vars=data)
             self.connection.commit()
         except Exception as e:
+            self.app.logger.error(str(e))
             self.connection.rollback()
             self.app.logger.error(e)
             raise DatabaseError("please try again later")
@@ -96,8 +100,9 @@ class DocumentRepository:
             return list<str>()
         
     def find_relevant_document(self, chat: Chat):
+        self.app.logger.info("find relevant document with fiter tenant_id: {} and project_uuid: {}".format(chat.tenant_id, chat.project_uuid))
         query = chat.chat
-        similiar_documents = self.pg_vector_store.vector_store.similarity_search(query=query, k=3)
+        similiar_documents = self.pg_vector_store.vector_store.similarity_search(query=query, k=3, filter={"tenant_id":chat.tenant_id, "project_uuid":chat.project_uuid})
         return similiar_documents
     
     def add_documents_to_memory_vector_store(self, documents: List[LangchaincoreDocument]) -> List[str]:

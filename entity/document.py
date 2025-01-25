@@ -8,6 +8,8 @@ class Document:
         self.file: FileStorage = file
         self.is_processed = False
         self.file_type = self.__check_file_type(file=file)
+        self.project_uuid = ""
+        self.tenant_id = ""
 
     def __check_file_type(self, file: FileStorage) -> int:
         file_name = file.filename
@@ -17,6 +19,10 @@ class Document:
             return FileType.IMAGE_DOCUMENT.value
         raise UnknownFileType(message="invalid file type", file_type=file_name)
     
+    def set_multinancy_attr(self, project_uuid: str, tenant_id: str):
+        self.project_uuid = project_uuid
+        self.tenant_id = tenant_id
+    
 class DocumentDb(object):
     def __init__(self, uuid: str="", document_name: str="", is_processed: bool=False, document_type: int=0, created_at: int=0, updated_at: int=0):
         self.uuid = uuid
@@ -25,9 +31,21 @@ class DocumentDb(object):
         self.document_type = document_type
         self.created_at = created_at
         self.updated_at = updated_at
+        self.project_uuid = ""
+        self.tenant_id = ""
+        
+    def set_multinancy_attr(self, project_uuid: str, tenant_id: str):
+        self.project_uuid = project_uuid
+        self.tenant_id = tenant_id
 
 class Chat(object):
     def __init__(self, chat: str, is_stream: bool):
         self.timestamp = time()
         self.chat = chat
         self.is_stream = is_stream
+        self.project_uuid = ""
+        self.tenant_id = ""
+
+    def set_multinancy_attr(self, project_uuid: str, tenant_id: str):
+        self.project_uuid = project_uuid
+        self.tenant_id = tenant_id

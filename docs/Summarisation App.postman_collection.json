@@ -1,0 +1,324 @@
+{
+	"info": {
+		"_postman_id": "3911265e-8626-40f6-bea1-207c6e3271c2",
+		"name": "Summarisation App",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "13811915",
+		"_collection_link": "https://solar-eclipse-727845.postman.co/workspace/Blue-Bird~68cc1b86-0612-4a9d-b48f-57d3f9bde290/collection/13811915-3911265e-8626-40f6-bea1-207c6e3271c2?action=share&source=collection_link&creator=13811915"
+	},
+	"item": [
+		{
+			"name": "Project",
+			"item": [
+				{
+					"name": "Get Projects",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:5000/v1/projects",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"v1",
+								"projects"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Project",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"audit\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:5000/v1/projects",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"v1",
+								"projects"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Projects",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Tenant-Id",
+								"value": "internal-audit",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"b60a66cb-bccb-51c8-8a73-a371a4683dbd\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:5000/v1/projects",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"v1",
+								"projects"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Upload File",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "internal-audit"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "document",
+							"type": "file",
+							"src": "/home/ekky-kharismadhany/Downloads/Juklak installasi Firmware Device IOT GB.pdf"
+						},
+						{
+							"key": "project",
+							"value": "14e323af-3895-5435-ade2-f9328e0a890c",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:5000/v1/documents",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"v1",
+						"documents"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Summarize Chat",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "internal-audit",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "document",
+							"type": "file",
+							"src": []
+						},
+						{
+							"key": "project_uuid",
+							"value": "14e323af-3895-5435-ade2-f9328e0a890c",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:5000/v1/summarize",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"v1",
+						"summarize"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Chat",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "external-audit",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"chat\": \"Ringkas dokumen petunjuk lapangan install IOT versi golden\",\n    \"project_uuid\": \"14e323af-3895-5435-ade2-f9328e0a890c\",\n    \"is_stream\": \"true\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/v1/chat",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"v1",
+						"chat"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Files",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "internal-audit",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://localhost:5000/v1/documents",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"v1",
+						"documents"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete File",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "internal-audit",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"uuid\": \"b60a66cb-bccb-51c8-8a73-a371a4683dbd\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/v1/documents",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"v1",
+						"documents"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Document Vectorization",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "internal-audit",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"uuid\": \"b60a66cb-bccb-51c8-8a73-a371a4683dbd\",\n    \"project_uuid\": \"14e323af-3895-5435-ade2-f9328e0a890c\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/v1/vector",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"v1",
+						"vector"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

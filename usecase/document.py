@@ -19,14 +19,14 @@ class DocumentUsecase:
         self.document_repository.store_document(document=document)
         return
     
-    def get_document(self) -> List[DocumentDb]:
-        documents = self.document_repository.get_documents()
+    def get_document(self, documentDb: DocumentDb) -> List[DocumentDb]:
+        documents = self.document_repository.get_documents(documentDb=documentDb)
         return documents
     
-    def delete_document(self, document: DocumentDb):
+    def delete_document(self, document: DocumentDb) -> DocumentDb:
         document_from_db = self.document_repository.get_document(document=document)
         self.document_repository.delete_document(document=document_from_db)
-        return
+        return document_from_db
     
     async def document_vectorization(self, document: DocumentDb):
         document_from_db = self.document_repository.get_document(document=document)
@@ -44,10 +44,12 @@ class DocumentUsecase:
         
     def chat_generation(self, chat: Chat) -> str:
         similiar_documents =  self.document_repository.find_relevant_document(chat=chat)
+        self.app.logger.info("found {} relevant documents".format(similiar_documents.__len__()))
         return self.ollama_adapter.generate_chat_response(chat=chat, similiar_documents=similiar_documents)
     
     def stream_chat_generation(self, chat: Chat) -> Iterator[str]:
         similiar_documents = self.document_repository.find_relevant_document(chat=chat)
+        self.app.logger.info("found {} relevant documents".format(similiar_documents.__len__()))
         return self.ollama_adapter.generate_streamable_chat_response(chat=chat, similiar_documents=similiar_documents)
 
     async def summarize_document(self, document: Document):

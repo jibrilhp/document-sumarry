@@ -8,6 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 class OllamaAdapter:
     def __init__(self):
+        self.app = current_app
         self.ollama_host = current_app.config["OLLAMA_HOST"]
         self.ollama_embedding_model = current_app.config["EMBEDDING_MODEL_NAME"]
         self.ollama_chat_model = current_app.config["CHAT_MODEL_NAME"]
@@ -22,6 +23,7 @@ class OllamaAdapter:
         current_app.logger.info("ollama adapter ready")
 
     def generate_chat_response(self, chat: Chat, similiar_documents: List[LangchaincoreDocument]):
+        self.app.logger.info("generate chat response with {} prompt".format(chat.chat))
         context = "\n".join([similiar_document.page_content for similiar_document in similiar_documents])
         template = """
         Given the following context:
@@ -35,6 +37,7 @@ class OllamaAdapter:
         return response
     
     def generate_streamable_chat_response(self, chat: Chat, similiar_documents: List[LangchaincoreDocument]):
+        self.app.logger.info("generate streamable chat response with {} prompt".format(chat.chat))
         context = "\n".join([similiar_document.page_content for similiar_document in similiar_documents])
         template = """
         Given the following context:
