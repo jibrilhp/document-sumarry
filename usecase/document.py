@@ -41,14 +41,26 @@ class DocumentUsecase:
             document_from_db.is_processed = True
             self.document_repository.update_document(document=document_from_db)
             return
+        if document_from_db.document_type == FileType.IMAGE_DOCUMENT.value:
+            langchain_document = self.storage_repository.load_image_with_langchain(image_db=document_from_db)
+            self.app.logger.info("image loaded with langchain, length {}".format(langchain_document.__len__()))
+            vectorized_ids = self.document_repository.add_documents_to_vector_store(langchain_document)
+            self.app.logger.info("vectorized id length {}".format(vectorized_ids.__len__()))
+            document_from_db.is_processed = True
+            self.document_repository.update_document(document=document_from_db)
+            return
         
     def chat_generation(self, chat: Chat) -> str:
         similiar_documents =  self.document_repository.find_relevant_document(chat=chat)
+        if similiar_documents.__len__() == 0:
+            return "Mohon maaf, kami tidak dapat menjawab pertanyaan anda"
         self.app.logger.info("found {} relevant documents".format(similiar_documents.__len__()))
         return self.ollama_adapter.generate_chat_response(chat=chat, similiar_documents=similiar_documents)
     
     def stream_chat_generation(self, chat: Chat) -> Iterator[str]:
         similiar_documents = self.document_repository.find_relevant_document(chat=chat)
+        if similiar_documents.__len__() == 0:
+            return "Mohon maaf, kami tidak dapat menjawab pertanyaan anda"
         self.app.logger.info("found {} relevant documents".format(similiar_documents.__len__()))
         return self.ollama_adapter.generate_streamable_chat_response(chat=chat, similiar_documents=similiar_documents)
 

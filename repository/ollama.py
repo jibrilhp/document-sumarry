@@ -30,7 +30,12 @@ class OllamaAdapter:
         {context}
 
         Answer the question: {question}
-        """
+
+        Important:
+        - If the answer is known, respond accurately using only the information in the provided context.
+        - If the answer is unknown or not explicitly mentioned in the context, respond **exactly** with:
+          "Mohon maaf, kami tidak dapat menjawab pertanyaan anda" 
+          (do not add any additional information, explanation, or encouragement).           """
         prompt = PromptTemplate(template=template, input_variables=["context", "question"])
         chain = prompt | self.chat_model | StrOutputParser()
         response = chain.invoke({"context": context, "question": chat.chat})
@@ -44,6 +49,11 @@ class OllamaAdapter:
         {context}
 
         Answer the question: {question}
+        Important:
+        - If the answer is known, respond accurately using only the information in the provided context.
+        - If the answer is unknown or not explicitly mentioned in the context, respond **exactly** with:
+          "Mohon maaf, kami tidak dapat menjawab pertanyaan anda" 
+          (do not add any additional information, explanation, or encouragement).        
         """
         prompt = PromptTemplate(template=template, input_variables=["context", "question"])
         chain = prompt | self.chat_model | StrOutputParser()
