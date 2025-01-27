@@ -5,6 +5,9 @@ from langchain_postgres.vectorstores import PGVector
 from langchain_core.embeddings import Embeddings
 from typing import List
 from langchain_community.vectorstores import InMemoryVectorStore
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from psycopg_pool import ConnectionPool
 
 class PostgresAdapter:
     def __init__(self):
@@ -50,3 +53,24 @@ class PGVectorAdapter:
 class InMemoryVector:
     def __init__(self, embedding: Embeddings):
         self.in_memory_vector_store = InMemoryVectorStore(embedding=embedding)
+
+class PostgresCheckpointer:
+    def __init__(self):
+        self._connection = "postgresql://{}:{}@{}:{}/{}".format(
+            current_app.config["DB_USER"],
+            current_app.config["DB_PASSWORD"],
+            current_app.config["DB_HOST"],
+            current_app.config["DB_PORT"],
+            current_app.config["DB_NAME"]
+        )
+        self._connection_kwargs = {
+            "autocommit": True,
+            "prepare_threshold": 0,
+        }
+        self._conn_pool = ConnectionPool(conninfo=self._connection, max_size=20, kwargs=self._connection_kwargs)
+        self.checkpoint_saver_conn = PostgresSaver(conn=self._conn_pool)
+        self.checkpoint_saver_conn.setup()
+
+    def get_checkpointer(self) -> BaseCheckpointSaver:
+        return self.checkpoint_saver_conn
+

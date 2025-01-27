@@ -1,17 +1,20 @@
 from flask import current_app, request, jsonify, Response
 from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
+from usecase.conversation import Conversation
 from entity.document import Document, DocumentDb, Chat
 from entity.project import Project
+from entity.conversation import ConversationIdentity
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
 
 
 class Routes:
-    def __init__(self, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase):
+    def __init__(self, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: Conversation):
         current_app.logger.setLevel("INFO")
         self.app = current_app
         self.document_usecase = document_usecase
         self.project_usecase = project_usecase
+        self.conversation_usecase = conversation_usecase
 
         @current_app.route("/v1/documents", methods=["POST"])
         def upload_document():
@@ -164,6 +167,20 @@ class Routes:
                 return jsonify({"error": "empty request"}), 400
             except Exception as e:
                 return jsonify({"error": str(e)}), 500
+            
+        @current_app.route("/v2/conversation", methods=["POST"])
+        async def create_chat_session():
+            try:
+                tenant_id = request.headers["Tenant-Id"]
+                project_uuid = request.form["project_uuid"]
+                conversation_uuid = request.form["conversation_uuid"]
+                message = request.form["message"]
+                conversation_identity = ConversationIdentity(tenant_id=tenant_id, project_uuid=project_uuid, conversation_uuid=conversation_uuid, message=message)
+                response_stream = self.conversation_usecase.chat_with_agent(conversion_identity=conversation_identity)
+                return jsonify({"message": response_stream})
+            except KeyError as e:
+                self.app.logger.error(str(e))
+                return jsonify({"error": str(e)}), 400
 
         @current_app.route("/")
         def index():
