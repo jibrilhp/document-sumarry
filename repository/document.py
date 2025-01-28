@@ -102,8 +102,11 @@ class DocumentRepository:
     def find_relevant_document(self, chat: Chat):
         self.app.logger.info("find relevant document with fiter tenant_id: {} and project_uuid: {}".format(chat.tenant_id, chat.project_uuid))
         query = chat.chat
-        similiar_documents = self.pg_vector_store.vector_store.similarity_search(query=query, k=3, filter={"tenant_id":chat.tenant_id, "project_uuid":chat.project_uuid})
-        return similiar_documents
+        similiar_documents = self.pg_vector_store.vector_store.similarity_search_with_relevance_scores(query=query, filter={"tenant_id":chat.tenant_id, "project_uuid":chat.project_uuid}, score_threshold=0.7)
+        sd = list()
+        for similiar_document in similiar_documents:
+            sd.append(similiar_document[0])
+        return sd
     
     def add_documents_to_memory_vector_store(self, documents: List[LangchaincoreDocument]) -> List[str]:
         try:

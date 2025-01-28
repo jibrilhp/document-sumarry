@@ -16,5 +16,5 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at bigint,
     updated_at bigint,
     projects_uuid VARCHAR REFERENCES projects(uuid),
-    tenant_id int
+    tenant_id varchar
 );
