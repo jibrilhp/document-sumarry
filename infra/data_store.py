@@ -45,7 +45,8 @@ class PGVectorAdapter:
             embeddings=embedding,
             collection_name=current_app.config["COLLECTION_NAME"],
             connection=self._connection,
-            use_jsonb=True
+            use_jsonb=True,
+            async_mode=False
         )
         current_app.logger.info("pg vector ready")
 

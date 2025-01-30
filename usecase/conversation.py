@@ -1,32 +1,29 @@
 from flask import current_app
-from entity.conversation import ConversationIdentity
+from entity.conversation import Conversation
 from entity.document import Chat
-from repository.chat_bot import ChatBotRepository
-from repository.ollama import OllamaAdapter
+from repository.chatbot import ChatBotRepository
+from infra.generative_provider import GenerativeAdapter
 from repository.document import DocumentRepository
 
-class Conversation:
-    def __init__(self, ollama_adapter: OllamaAdapter, chatbot_repository: ChatBotRepository, document_repository: DocumentRepository):
+class ConversationUsecase:
+    def __init__(self, ollama_adapter: GenerativeAdapter, chatbot_repository: ChatBotRepository, document_repository: DocumentRepository):
         self.app = current_app
         self.ollama_adapter = ollama_adapter
         self.chatbot_repository = chatbot_repository
         self.document_repository = document_repository
 
-    def chat_with_agent(self, conversion_identity: ConversationIdentity):
-        self.app.logger.info("conversation request with hash: {}".format(conversion_identity.conversation_uuid))
-        conversation_chatbot = self.chatbot_repository.get_chat_state(thread_id=conversion_identity.conversation_uuid)
-        if conversation_chatbot is None:
-            self.app.logger.info("conversation for {} id is not found".format(conversion_identity.conversation_uuid))
-            conversation_chatbot = self.chatbot_repository.create_chat_state(thread_id=conversion_identity.conversation_uuid, runnable=self.ollama_adapter.chat_bot)
-            self.app.logger.info("conversation for {} id is created".format(conversion_identity.conversation_uuid))
-        config = {"configurable": {"thread_id": conversion_identity.conversation_uuid}}
-        chat = Chat(chat=conversion_identity.message, is_stream=False)
-        chat.set_multinancy_attr(project_uuid=conversion_identity.project_uuid, tenant_id=conversion_identity.tenant_id)
-        relevant_document = self.document_repository.find_relevant_document(chat=chat)
-        events = conversation_chatbot.invoke(
-            {"messages": [{"role": "user", "content": self.ollama_adapter.generate_prompt(chat=conversion_identity, similiar_documents=relevant_document)}]}, 
+    def chat_with_agent(self, conversation: Conversation):
+        self.app.logger.info("conversation request with conversation_uuid {}".format(conversation.conversation_uuid))
+        chatbot = self.chatbot_repository.get_chatbot(conversation.conversation_uuid)
+        if chatbot is None:
+            self.app.logger.info("conversation for {} id is not found".format(conversation.conversation_uuid))
+            chatbot = self.chatbot_repository.create_chatbot(conversation.conversation_uuid)
+            self.app.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
+        config = {"configurable": {"thread_id": conversation.conversation_uuid}}
+        response = chatbot.invoke(
+            input={"question": conversation.message, "document_from_user": conversation.document_from_user},
             config=config,
             stream_mode="values"
-            )
-        response_content = events["messages"][-1].content
-        return response_content
+        )
+        return response.get("answer")
+        

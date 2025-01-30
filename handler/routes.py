@@ -1,40 +1,20 @@
-from flask import current_app, request, jsonify, Response
+from flask import current_app, request, jsonify
 from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
-from usecase.conversation import Conversation
+from usecase.conversation import ConversationUsecase
 from entity.document import Document, DocumentDb, Chat
 from entity.project import Project
-from entity.conversation import ConversationIdentity
+from entity.conversation import Conversation
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
 
 
 class Routes:
-    def __init__(self, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: Conversation):
+    def __init__(self, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: ConversationUsecase):
         current_app.logger.setLevel("INFO")
         self.app = current_app
         self.document_usecase = document_usecase
         self.project_usecase = project_usecase
         self.conversation_usecase = conversation_usecase
-
-        @current_app.route("/v1/documents", methods=["POST"])
-        def upload_document():
-            try:
-                tenant_id = request.headers["Tenant-Id"]
-                file = request.files["document"]
-                project_uuid = request.form["project"]
-                self.app.logger.info("receive document {}".format(file.filename))
-                document = Document(file=file)
-                document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                self.document_usecase.store_document(document=document)
-                success = {"message": "document upload success"}
-                return jsonify(success)
-            except KeyError as e:
-                self.app.logger.error(str(e))
-                bad_request = {"error": "request is incomplete"}
-                return jsonify(bad_request), 400
-            except FileConflictDb as e:
-                error = {"error": str(e)}
-                return jsonify(error), 409
 
         @current_app.route("/v1/documents", methods=["GET"])
         def get_documents():
@@ -71,64 +51,6 @@ class Routes:
                 self.app.logger.error(str(e))
                 return jsonify({"error": "please try again later"}), 500
             
-        @current_app.route("/v1/vector", methods=["POST"])
-        async def vector_document():
-            try:
-                req = request.get_json()
-                if not req:
-                    return jsonify({"error": "empty request"}), 400
-                document_uuid = req["uuid"]
-                project_uuid = req["project_uuid"]
-                tenant_id = request.headers["Tenant-Id"]
-                document = DocumentDb(uuid=document_uuid)
-                document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                await self.document_usecase.document_vectorization(document=document)
-                return jsonify({"message":"document with {} vectorization is completed".format(document_uuid)})
-            except KeyError as e:
-                return jsonify({"error": "{} not found".format(e)}), 400
-            except ResourceNotFound as e:
-                return jsonify({"error": str(e)}), 404
-            except DatabaseError:
-                return jsonify({"error": "please try again later"})
-            
-        @current_app.route("/v1/chat", methods=["POST"])
-        def chat_generation():
-            try:
-                req = request.get_json()
-                if not req:
-                    return jsonify({"error": "empty request"}), 400
-                user_chat: str = req["chat"]
-                is_stream: bool = req["is_stream"]
-                project_uuid: str = req["project_uuid"]
-                tenant_id: str = request.headers["Tenant-Id"]
-                chat = Chat(chat=user_chat, is_stream=is_stream)
-                chat.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                if chat.is_stream:
-                    return Response(
-                        response=self.document_usecase.stream_chat_generation(chat=chat),
-                        content_type="text/plain"
-                    )
-                result = self.document_usecase.chat_generation(chat=chat)
-                return jsonify({"message": result})
-            except Exception as e:
-                self.app.logger.error(str(e))
-                return jsonify({"error": "please try again later"}), 500
-        
-        @current_app.route("/v1/summarize", methods=["POST"])
-        async def summarize_document():
-            try:
-                file = request.files["document"]
-                self.app.logger.info("receive document {}".format(file.filename))
-                document = Document(file=file)
-                response = await self.document_usecase.summarize_document(document=document)
-                return Response(
-                    response=response,
-                    content_type="text/plain"
-                )
-            except KeyError:
-                bad_request = {"error": "filename not found"}
-                return jsonify(bad_request), 400
-        
         @current_app.route("/v1/projects", methods=["POST"])
         def create_project():
             try:
@@ -175,8 +97,20 @@ class Routes:
                 project_uuid = request.form["project_uuid"]
                 conversation_uuid = request.form["conversation_uuid"]
                 message = request.form["message"]
-                conversation_identity = ConversationIdentity(tenant_id=tenant_id, project_uuid=project_uuid, conversation_uuid=conversation_uuid, message=message)
-                response_stream = self.conversation_usecase.chat_with_agent(conversion_identity=conversation_identity)
+                file = request.files.get("document")
+                conversation = Conversation(
+                    tenant_id=tenant_id, project_uuid=project_uuid, 
+                    conversation_uuid=conversation_uuid, message=message
+                )
+                
+                if file is not None:
+                    document = Document(file=file)
+                    document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
+                    document_db = self.document_usecase.store_document(document=document)
+                    langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                    conversation.set_document_from_user(langchain_document)
+
+                response_stream = self.conversation_usecase.chat_with_agent(conversation=conversation)
                 return jsonify({"message": response_stream})
             except KeyError as e:
                 self.app.logger.error(str(e))

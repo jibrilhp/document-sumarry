@@ -1,4 +1,4 @@
-from repository.data_store import PostgresAdapter
+from infra.data_store import PostgresAdapter
 from entity.project import Project
 from flask import current_app
 from uuid import uuid5, NAMESPACE_X500

@@ -1,4 +1,4 @@
-from repository.data_store import PostgresAdapter, PGVectorAdapter, InMemoryVector
+from infra.data_store import PostgresAdapter, PGVectorAdapter, InMemoryVector
 from entity.document import Document, DocumentDb, Chat
 from time import time
 from flask import current_app
@@ -52,13 +52,17 @@ class DocumentRepository:
 
     def store_document(self, document: Document):
         sql = "INSERT INTO documents(uuid, document_name, is_processed, document_type_id, created_at, updated_at, projects_uuid, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"
+        uid = uuid5(NAMESPACE_X500, document.file.filename).__str__()
         data = (
-           uuid5(NAMESPACE_X500, document.file.filename).__str__() , document.file.filename, False, document.file_type, time(), time(), document.project_uuid, document.tenant_id
+           uid , document.file.filename, False, document.file_type, time(), time(), document.project_uuid, document.tenant_id
         )
         try:
             self.cursor.execute(query=sql, vars=data)
             self.connection.commit()
             self.app.logger.info("document {} is stored into db".format(document.file.filename))
+            document_db = DocumentDb(uuid=uid, document_name=document.file.filename, document_type=document.file_type)
+            document_db.set_multinancy_attr(project_uuid=document.project_uuid, tenant_id=document.tenant_id)
+            return document_db
         except UniqueViolation as e:
             self.app.logger.error(str(e))
             self.connection.rollback()
@@ -107,16 +111,4 @@ class DocumentRepository:
         for similiar_document in similiar_documents:
             sd.append(similiar_document[0])
         return sd
-    
-    def add_documents_to_memory_vector_store(self, documents: List[LangchaincoreDocument]) -> List[str]:
-        try:
-            ids = self. inmmeory_vector_store.in_memory_vector_store.add_documents(documents=documents)
-            return ids
-        except ValueError:
-            return list<str>()
-        
-    def find_relevant_document_from_memory(self, chat: Chat):
-        query = chat.chat
-        similiar_documents = self.inmmeory_vector_store.in_memory_vector_store.similarity_search(query=query, k=3)
-        return similiar_documents
     
