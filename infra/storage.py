@@ -30,7 +30,6 @@ class StorageRepository:
     def load_image_with_langchain(self, image_db: DocumentDb) -> List[LangchainDocument]:
         image = open_image("{}/{}/{}".format(self.__FILE_PATH__, image_db.project_uuid, image_db.document_name))
         text_from_image: str = image_to_string(image=image)
-        print(text_from_image)
         langchain_images: List[LangchainDocument] = list()
         langchain_image: LangchainDocument = LangchainDocument(page_content=text_from_image)
         langchain_image.metadata["tenant_id"] = image_db.tenant_id

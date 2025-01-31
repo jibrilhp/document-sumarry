@@ -21,7 +21,7 @@ class ConversationUsecase:
             self.app.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
         response = chatbot.invoke(
-            input={"question": conversation.message, "document_from_user": conversation.document_from_user},
+            input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
             config=config,
             stream_mode="values"
         )

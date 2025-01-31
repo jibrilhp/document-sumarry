@@ -30,6 +30,7 @@ class State(TypedDict):
     answer: str
     index: int
     document_from_user: List[Document]
+    conversation: Annotated[list, add_messages]
 
 class ConversationalChatbot:
     def __init__(self):
@@ -45,7 +46,7 @@ class ConversationalChatbot:
         self._graph_builder.add_edge(start_key, end_key)
 
     def compile_graph(self, checkpointer: BaseCheckpointSaver) -> CompiledGraph:
-        app = self._graph_builder.compile()
+        app = self._graph_builder.compile(checkpointer=checkpointer)
         image_data = app.get_graph().draw_mermaid_png()
 
         # Convert the image data to a PIL Image object

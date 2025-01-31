@@ -24,19 +24,20 @@ class ChatBotRepository:
         chatbot.add_node("refine_summary", self.__generate_summary_refinement)
         chatbot.add_node("generate_chat_response", self.__generate_chat_response)
         chatbot.add_node("fetch_context", self.__fetch_context)
+        chatbot.add_node("add_answer_to_conversation", self.__add_answer_to_conversation)
 
         chatbot.add_conditional_edges(source=START, path=self.__should_summarize)
         chatbot.add_edges(start_key="fetch_context", end_key="generate_chat_response")
-        chatbot.add_edges(start_key="generate_chat_response", end_key=END)
+        chatbot.add_edges(start_key="generate_chat_response", end_key="add_answer_to_conversation")
         chatbot.add_conditional_edges(source="generate_initial_summary", path=self.__should_refine)
         chatbot.add_conditional_edges(source="refine_summary", path=self.__should_refine)
+        chatbot.add_edges(start_key="add_answer_to_conversation", end_key=END)
 
         compiled_graph = chatbot.compile_graph(checkpointer=self.checkpointer)
         self.chat_states[thread_id] = compiled_graph
         return compiled_graph
 
     def get_chatbot(self, thread_id: str) ->CompiledGraph:
-        print("in repo", self.chat_states)
         chat_bot = self.chat_states.get(thread_id)
         return chat_bot
     
@@ -84,9 +85,6 @@ class ChatBotRepository:
     
     def __generate_summary_refinement(self, state: State, config: RunnableConfig):
         self.app.logger.info("on __generate_summary_refinement")
-        print(state.get("answer"))
-        print(state.get("document_from_user")[state.get("index")])
-        print(state.get("index"))
         refined_summary = self.__create_summary_refinement_chain().invoke(
                 {
                     "existing_answer": state["answer"],
@@ -98,23 +96,21 @@ class ChatBotRepository:
     
     def __generate_chat_response(self, state: State):
         self.app.logger.info("on __generate_chat_response")
-        print(state)
         chain = self.__create_answer_chain()
-        print(chain)
         answer = chain.invoke(
           {    
-            "question": state["question"],
+            "question": state["conversation"],
             "context": state["context"]
           }
         )
         self.app.logger.info(answer)
         return {"answer": answer}
     
-    def __should_refine(self, state: State) -> Literal["refine_summary", END]:
+    def __should_refine(self, state: State) -> Literal["refine_summary", "add_answer_to_conversation"]:
         self.app.logger.info("on __should_refine")
         if state["index"] >= len(state["document_from_user"]):
-            self.app.logger.info("go to END")
-            return END
+            self.app.logger.info("go to add_answer_to_conversation")
+            return "add_answer_to_conversation"
         else:
             self.app.logger.info("go to refine summary")
             return "refine_summary"
@@ -128,14 +124,17 @@ class ChatBotRepository:
         return "generate_initial_summary"
 
     def __fetch_context(self, state: State) -> State:
-        self.app.logger.info("on __fetch_context")
         relevant_docs_with_score = self.pgvector.vector_store.similarity_search_with_relevance_scores(
-            query=state["question"],
+            query=state.get("conversation")[-1].content,
             score_threshold=0.6
         )
         context = "\n".join([similiar_document[0].page_content for similiar_document in relevant_docs_with_score])
-        self.app.logger.info(context)
         return {"context": context}
+    
+    def __add_answer_to_conversation(self, state: State)-> State:
+        print(state.get("conversation"))
+        self.app.logger.info("on __add_response_to_conversation")
+        return {"conversation": [state.get("answer")]}
     
 
         

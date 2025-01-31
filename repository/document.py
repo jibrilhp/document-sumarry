@@ -49,6 +49,23 @@ class DocumentRepository:
             )
             document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
             return document
+    
+    def get_document_by_name(self, document: DocumentDb)-> DocumentDb:
+        sql = "select uuid, document_name, is_processed, document_type_id, created_at, updated_at, tenant_id, projects_uuid from documents where document_name = %s AND tenant_id = %s limit 1"
+        data = (document.document_name,document.tenant_id)
+        self.app.logger.info("get document with where {} {}".format( document.uuid, document.tenant_id))
+        self.cursor.execute(sql, data)
+        results = self.cursor.fetchall()
+        if results.__len__() == 0:
+            raise ResourceNotFound("resource not found")
+        for row in results:
+            uuid, document_name, is_processed, document_type, created_at, updated_at, tenant_id, project_uuid = row
+            document = DocumentDb(
+                uuid=uuid, document_name=document_name, is_processed=is_processed,
+                document_type=document_type, created_at=created_at, updated_at=updated_at
+            )
+            document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
+            return document
 
     def store_document(self, document: Document):
         sql = "INSERT INTO documents(uuid, document_name, is_processed, document_type_id, created_at, updated_at, projects_uuid, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"

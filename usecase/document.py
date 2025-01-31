@@ -5,7 +5,7 @@ from entity.document import Document, DocumentDb
 from flask import current_app
 from typing import List
 from static.enum import FileType
-from langchain_core.documents import Document
+from langchain_core.documents import Document as LangchainDocument
 
 class DocumentUsecase:
     def __init__(self, document_repository: DocumentRepository, storage_repository: StorageRepository, ollama_adapter: GenerativeAdapter):
@@ -15,6 +15,12 @@ class DocumentUsecase:
         self.app = current_app
 
     def store_document(self, document: Document):
+        document_db_from_file = DocumentDb(document_name=document.file.filename)
+        document_db_from_file.set_multinancy_attr(project_uuid=document.project_uuid, tenant_id=document.tenant_id)
+        document_db = self.document_repository.get_document_by_name(document_db_from_file)
+        if document_db.document_name != "":
+            self.app.logger.info("document already exist: {}".format(document_db.document_name))
+            return document_db
         self.app.logger.info("processing file {}".format( document.file.filename))
         self.storage_repository.store_document(document=document)
         return self.document_repository.store_document(document=document)

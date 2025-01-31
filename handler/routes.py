@@ -39,9 +39,7 @@ class Routes:
                 document_uuid = req["uuid"]
                 document = DocumentDb(uuid=document_uuid)
                 document.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
-                print(document.__dict__)
                 deleted_document = self.document_usecase.delete_document(document=document)
-                print(deleted_document.__dict__)
                 if deleted_document.uuid == "":
                     return jsonify({"error": "document not found"}), 404
                 return jsonify({"message":"document with {} uuid is deleted".format(document_uuid)})
