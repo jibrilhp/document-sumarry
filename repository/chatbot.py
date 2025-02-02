@@ -1,21 +1,21 @@
 from typing import Dict, Literal
 from entity.conversation import ConversationalChatbot, State
 from langgraph.graph.graph import CompiledGraph
-from infra.data_store import PostgresCheckpointer, PGVectorAdapter
+from infra.data_store import PostgresAdapter
 from infra.generative_provider import GenerativeAdapter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import START, END
-from flask import current_app
+import logging
 
 class ChatBotRepository:
-    def __init__(self, generative_provider: GenerativeAdapter, postgres_checkpointer: PostgresCheckpointer, pgvector: PGVectorAdapter):
+    def __init__(self, generative_provider: GenerativeAdapter, postgres_adapter: PostgresAdapter):
         self.chat_states: Dict[str,ConversationalChatbot] = {}
-        self.checkpointer = postgres_checkpointer.get_checkpointer()
+        self.checkpointer = postgres_adapter.get_checkpointer()
         self.generative_adapter = generative_provider
-        self.pgvector = pgvector
-        self.app = current_app
+        self.pgvector = postgres_adapter.get_vector_store()
+        self.logger = logging.getLogger(__name__)
 
     def create_chatbot(self, thread_id: str) -> CompiledGraph:
         chatbot = ConversationalChatbot()
@@ -76,7 +76,7 @@ class ChatBotRepository:
         return answer_prompt | self.generative_adapter.chat_model | StrOutputParser()
     
     def __generate_initial_summary(self, state: State, config: RunnableConfig) -> State:
-        self.app.logger.info("on __generate_initial_summary")
+        self.logger.info("on __generate_initial_summary")
         summary = self.__create_initial_summary_chain().invoke(
               input=state["document_from_user"][0],
               config=config,
@@ -84,7 +84,7 @@ class ChatBotRepository:
         return {"answer": summary, "index": 1}
     
     def __generate_summary_refinement(self, state: State, config: RunnableConfig):
-        self.app.logger.info("on __generate_summary_refinement")
+        self.logger.info("on __generate_summary_refinement")
         refined_summary = self.__create_summary_refinement_chain().invoke(
                 {
                     "existing_answer": state["answer"],
@@ -95,7 +95,7 @@ class ChatBotRepository:
         return  {"answer": refined_summary, "index": state["index"] + 1}
     
     def __generate_chat_response(self, state: State):
-        self.app.logger.info("on __generate_chat_response")
+        self.logger.info("on __generate_chat_response")
         chain = self.__create_answer_chain()
         answer = chain.invoke(
           {    
@@ -103,24 +103,24 @@ class ChatBotRepository:
             "context": state["context"]
           }
         )
-        self.app.logger.info(answer)
+        self.logger.info(answer)
         return {"answer": answer}
     
     def __should_refine(self, state: State) -> Literal["refine_summary", "add_answer_to_conversation"]:
-        self.app.logger.info("on __should_refine")
+        self.logger.info("on __should_refine")
         if state["index"] >= len(state["document_from_user"]):
-            self.app.logger.info("go to add_answer_to_conversation")
+            self.logger.info("go to add_answer_to_conversation")
             return "add_answer_to_conversation"
         else:
-            self.app.logger.info("go to refine summary")
+            self.logger.info("go to refine summary")
             return "refine_summary"
     
     def __should_summarize(self, state: State) -> Literal["fetch_context", "generate_initial_summary"]:
-        self.app.logger.info("on __should_summarize")
+        self.logger.info("on __should_summarize")
         if state.get("document_from_user") is None:
-            self.app.logger.info("go to fetch_context")
+            self.logger.info("go to fetch_context")
             return "fetch_context"
-        self.app.logger.info("go to generate_initial_summary")
+        self.logger.info("go to generate_initial_summary")
         return "generate_initial_summary"
 
     def __fetch_context(self, state: State) -> State:
@@ -133,7 +133,7 @@ class ChatBotRepository:
     
     def __add_answer_to_conversation(self, state: State)-> State:
         print(state.get("conversation"))
-        self.app.logger.info("on __add_response_to_conversation")
+        self.logger.info("on __add_response_to_conversation")
         return {"conversation": [state.get("answer")]}
     
 

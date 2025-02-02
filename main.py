@@ -1,33 +1,37 @@
-from flask import Flask
-import json
-from infra.data_store import PostgresAdapter, InMemoryVector, PostgresCheckpointer
-from repository.document import DocumentRepository
+from fastapi import FastAPI, APIRouter
+import uvicorn
+
+from infra.logging import setup_logging
+from infra.settings import Settings
+from infra.data_store import PostgresAdapter
 from infra.storage import StorageRepository
 from infra.generative_provider import GenerativeAdapter
-from infra.data_store import PGVectorAdapter
+from repository.document import DocumentRepository     
 from repository.project import ProjectRepository
 from repository.chatbot import ChatBotRepository
 from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
 from handler.routes import Routes
+import logging
 
-app = Flask(__name__)
+setup_logging()
+logging.getLogger(__name__)
 
-if __name__ == "__main__":
-    app.config.from_file("env.json", load=json.load)
-    with app.app_context():
-        pg_checkpointer = PostgresCheckpointer()
-        generative_adapter = GenerativeAdapter()
-        pg_vector_adapter = PGVectorAdapter(generative_adapter.embedding_model)
-        inmemory_vector_adapter = InMemoryVector(generative_adapter.embedding_model)
-        postgres_adapter = PostgresAdapter()
-        documentRepository = DocumentRepository(db=postgres_adapter, pgvector=pg_vector_adapter, inmemory_vector=inmemory_vector_adapter)
-        project_repository = ProjectRepository(db=postgres_adapter)
-        storage_repository = StorageRepository()
-        chatbot_repository = ChatBotRepository(postgres_checkpointer=pg_checkpointer, generative_provider=generative_adapter, pgvector=pg_vector_adapter)
-        document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=generative_adapter)
-        project_usecase = ProjectUsecase(project_repository=project_repository)
-        conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository)
-        routes = Routes(document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase)
-    app.run(debug=True)
+app = FastAPI()
+router = APIRouter()
+
+
+logging.info("setup application...")
+settings = Settings()
+generative_adapter = GenerativeAdapter()
+postgres_adapter = PostgresAdapter(settings, generative_adapter.embedding_model)
+documentRepository = DocumentRepository(db=postgres_adapter)
+project_repository = ProjectRepository(db=postgres_adapter)
+storage_repository = StorageRepository()
+chatbot_repository = ChatBotRepository(postgres_adapter=postgres_adapter, generative_provider=generative_adapter)
+document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=generative_adapter)
+project_usecase = ProjectUsecase(project_repository=project_repository)
+conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository)
+routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase)
+app.include_router(router=router)

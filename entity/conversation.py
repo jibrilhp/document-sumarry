@@ -7,22 +7,16 @@ from langchain_core.runnables.base import RunnableLike
 from langgraph.graph.graph import CompiledGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langchain_core.documents import Document
-from IPython.display import Image
 from PIL import Image as PILImage
 import io
+from pydantic import BaseModel
 
-class Conversation:
-
-    document_from_user: List[Document] = None
-
-    def __init__(self, tenant_id: str, project_uuid: str, conversation_uuid: str, message: str):
-        self.tenant_id = tenant_id
-        self.project_uuid = project_uuid
-        self.conversation_uuid = conversation_uuid
-        self.message = message
-
-    def set_document_from_user(self, document_from_user: List[Document]):
-        self.document_from_user = document_from_user
+class Conversation(BaseModel):
+    project_id: str
+    conversation_uuid: str
+    message: str
+    tenant_id: str | None
+    document_from_user: List[Document] | None
 
 class State(TypedDict):
     context: str

@@ -6,7 +6,7 @@ class ProjectUsecase:
     def __init__(self, project_repository: ProjectRepository):
         self.project_repository = project_repository
 
-    def create_project(self, project: Project) -> str:
+    def create_project(self, project: Project) -> Project:
         return self.project_repository.create_project(project=project)
     
     def get_projects(self) -> List[Project]:
