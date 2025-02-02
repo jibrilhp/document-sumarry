@@ -7,7 +7,7 @@ from repository.document import DocumentRepository
 
 class ConversationUsecase:
     def __init__(self, ollama_adapter: GenerativeAdapter, chatbot_repository: ChatBotRepository, document_repository: DocumentRepository):
-        self.app = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.ollama_adapter = ollama_adapter
         self.chatbot_repository = chatbot_repository
         self.document_repository = document_repository
@@ -26,4 +26,13 @@ class ConversationUsecase:
             stream_mode="values"
         )
         return response.get("answer")
+    
+    def get_chat_history(self, conversation: Conversation):
+        config = {"configurable": {"thread_id": conversation.conversation_uuid}}
+        chatbot = self.chatbot_repository.get_chatbot(conversation.conversation_uuid)
+        if chatbot is None:
+            self.logger.info("conversation for {} id is not found".format(conversation.conversation_uuid))
+            chatbot = self.chatbot_repository.create_chatbot(conversation.conversation_uuid)
+            self.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
+        return self.chatbot_repository.get_chat_history(config, chatbot)
         

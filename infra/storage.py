@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL.Image import open as open_image
 from pytesseract.pytesseract import image_to_string
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import shutil
 
 class StorageRepository:
     def __init__(self):
@@ -13,12 +14,13 @@ class StorageRepository:
 
     def store_document(self, document: Document):
         Path("{}/{}".format(self.__FILE_PATH__, document.project_uuid)).mkdir(parents=True, exist_ok=True)
-        document.file.save("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename))
+        with open("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename), "wb") as buffer:
+            shutil.copyfileobj(document.file.file, buffer)  # Efficient file streaming
 
     async def load_pdf_document_with_langchain(self, document: DocumentDb)-> List[LangchainDocument]:
         loader = PyPDFLoader("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.document_name))
         pages: List[LangchainDocument] = list()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
         iter_document = loader.lazy_load()
         page_chunks = text_splitter.split_documents(iter_document)
         for page_chunk in page_chunks:

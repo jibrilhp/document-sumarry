@@ -3,9 +3,9 @@ from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
 from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
-from entity.conversation import Conversation
+from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
-from fastapi import Header, status, UploadFile, APIRouter, HTTPException
+from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form
 from fastapi.responses import JSONResponse, Response
 from typing import Annotated, List
 import logging
@@ -95,12 +95,23 @@ class Routes:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
-        @self.app.post("v1/conversation")
-        async def create_chat_session(tenant_id: Annotated[str | None, Header()], conversation: Conversation, file: UploadFile):
+        @self.app.post("/v1/conversation")
+        async def create_chat_session(
+            tenant_id: Annotated[str | None, Header()],
+            project_uuid: Annotated[str | None, Form()],
+            message: Annotated[str | None, Form()],
+            conversation_uuid: Annotated[str | None, Form()],
+            file: UploadFile | None = None):
             try:
+                conversation = Conversation(
+                    project_id=project_uuid,
+                    conversation_uuid=conversation_uuid,
+                    message = message,
+                    tenant_id=tenant_id
+                )
                 if file is not None:
                     document = Document(file=file)
-                    document.set_multinancy_attr(project_uuid=conversation.project_id, tenant_id=tenant_id)
+                    document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
                     document_db = self.document_usecase.store_document(document=document)
                     langchain_document = await self.document_usecase.document_vectorization(document=document_db)
                     conversation.document_from_user = langchain_document
@@ -110,6 +121,18 @@ class Routes:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
+        @self.app.get("/v1/conversation/{conversation_uuid}")
+        async def chat_history(
+            tenant_id: Annotated[str | None, Header()],
+            conversation_uuid: str
+        ) -> List[ConversationState]:
+            try:
+                conversation = Conversation(tenant_id=tenant_id, conversation_uuid=conversation_uuid)
+                return self.conversation_usecase.get_chat_history(conversation)
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+            
         @self.app.get("/")
         def index():
             return "<p>welcome to document summarisation tools</p>"

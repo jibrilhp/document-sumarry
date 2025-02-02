@@ -12,7 +12,7 @@ class DocumentUsecase:
         self.document_repository = document_repository
         self.storage_repository = storage_repository
         self.ollama_adapter = ollama_adapter
-        self.app = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__)
 
     def store_document(self, document: Document):
         document_db_from_file = DocumentDb(document_name=document.file.filename)

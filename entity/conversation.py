@@ -12,11 +12,11 @@ import io
 from pydantic import BaseModel
 
 class Conversation(BaseModel):
-    project_id: str
-    conversation_uuid: str
-    message: str
-    tenant_id: str | None
-    document_from_user: List[Document] | None
+    project_id: str | None = ""
+    conversation_uuid: str | None = ""
+    message: str | None = ""
+    tenant_id: str | None = ""
+    document_from_user: List[Document] | None = None
 
 class State(TypedDict):
     context: str
@@ -25,6 +25,10 @@ class State(TypedDict):
     index: int
     document_from_user: List[Document]
     conversation: Annotated[list, add_messages]
+
+class ConversationState(BaseModel):
+    question: str | None = ""
+    answer: str | None = ""
 
 class ConversationalChatbot:
     def __init__(self):

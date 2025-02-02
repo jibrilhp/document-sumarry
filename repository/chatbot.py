@@ -1,5 +1,5 @@
-from typing import Dict, Literal
-from entity.conversation import ConversationalChatbot, State
+from typing import Dict, Literal, List
+from entity.conversation import ConversationalChatbot, State, ConversationState
 from langgraph.graph.graph import CompiledGraph
 from infra.data_store import PostgresAdapter
 from infra.generative_provider import GenerativeAdapter
@@ -44,33 +44,34 @@ class ChatBotRepository:
     def __create_initial_summary_chain(self):
         summarize_prompt = ChatPromptTemplate(
             [
-                ("human", "Write a concise summary of the following: {context}")
+                ("human", "Buat ringkasan dari konteks berikut {context}")
             ]
             )
         return summarize_prompt | self.generative_adapter.chat_model | StrOutputParser()
     
     def __create_summary_refinement_chain(self):
         refine_template = """
-            Produce a final summary.
+            Buatkan sebuah ringkasan akhir
 
-            Existing summary up to this point:
+            Ringkasan saat ini adalah:
             {existing_answer}
 
-            New context:
+            Konteks baru:
             ------------
             {context}
             ------------
 
-            Given the new context, refine the original summary.
+            Dengan konteks baru, perbaiki ringkasan awal
         """
         refine_prompt = ChatPromptTemplate([("human", refine_template)])
         return refine_prompt | self.generative_adapter.chat_model | StrOutputParser()
 
     def __create_answer_chain(self):
         template = """
-            You are a helpful helper whose job to help your user to summarize and document.
-            You can discuss the content of the document with this context {context} or you can use information from previous conversation.
-            Answer this question {question}  
+            Anda adalah pembantu yang handal dan punya pekerjaan untuk membantu pengguna dan meringkas dokumen.
+            Anda bisa mendiskusikan konten dari dokumen dengan konteks berikut {context} atau anda bisa gunakan informasi dari percakapan berikut {conversation}.
+            Apabila pengguna mengguna
+            Jawab pertanyaan ini {question}  
         """
         answer_prompt = ChatPromptTemplate([("human", template)])
         return answer_prompt | self.generative_adapter.chat_model | StrOutputParser()
@@ -99,7 +100,8 @@ class ChatBotRepository:
         chain = self.__create_answer_chain()
         answer = chain.invoke(
           {    
-            "question": state["conversation"],
+            "conversation": state["conversation"],
+            "question": state["conversation"][-1],
             "context": state["context"]
           }
         )
@@ -124,7 +126,7 @@ class ChatBotRepository:
         return "generate_initial_summary"
 
     def __fetch_context(self, state: State) -> State:
-        relevant_docs_with_score = self.pgvector.vector_store.similarity_search_with_relevance_scores(
+        relevant_docs_with_score = self.pgvector.similarity_search_with_relevance_scores(
             query=state.get("conversation")[-1].content,
             score_threshold=0.6
         )
@@ -132,9 +134,26 @@ class ChatBotRepository:
         return {"context": context}
     
     def __add_answer_to_conversation(self, state: State)-> State:
-        print(state.get("conversation"))
         self.logger.info("on __add_response_to_conversation")
         return {"conversation": [state.get("answer")]}
     
+    def get_chat_history(self, config: RunnableConfig, compiled_graph: CompiledGraph):
+        conversation_list: List[ConversationState] = []
+        conversation_state_value: List = compiled_graph.get_state(config).values.get("conversation")
+
+        if conversation_state_value is None:
+            return []
+
+        for idx, v in enumerate(conversation_state_value, start=1):
+            print(v)
+            if idx % 2 == 1:
+                conversation = ConversationState()
+                conversation.question = v.content
+            else:  
+                conversation.answer = v.content
+                conversation_list.append(conversation)
+
+        return conversation_list
+
 
         

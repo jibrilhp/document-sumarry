@@ -3,7 +3,7 @@ from entity.document import Document, DocumentDb
 from time import time
 from uuid import uuid5, NAMESPACE_X500
 from psycopg2.errors import UniqueViolation
-from error.error import FileConflictDb, DatabaseError, ResourceNotFound
+from error.error import FileConflictDb, DatabaseError
 from typing import List
 from langchain_core.documents import Document as LangchaincoreDocument
 import logging
@@ -62,6 +62,8 @@ class DocumentRepository:
                 data = (document.document_name,document.tenant_id)
                 self.logger.info("get document with where {} {}".format( document.uuid, document.tenant_id))
                 results = conn.execute(sql, data).fetchall()
+                if results.__len__() == 0:
+                    return DocumentDb()
                 for row in results:
                     uuid, document_name, is_processed, document_type, created_at, updated_at, tenant_id, project_uuid = row
                     document = DocumentDb(
@@ -103,7 +105,7 @@ class DocumentRepository:
             sql = "update documents set is_processed = %s, updated_at = %s where uuid = %s"
             data = (document.is_processed, time(), document.uuid)
             try:
-                conn.execute(query=sql, vars=data)
+                conn.execute(sql, data)
                 conn.commit()
             except Exception as e:
                 self.logger.error(str(e))
@@ -116,7 +118,7 @@ class DocumentRepository:
             data = (document.uuid,document.tenant_id)
             self.logger.info("delete document with where {} {}".format(document.uuid, document.tenant_id))
             try:
-                conn.execute(query=sql, vars=data)
+                conn.execute(sql, data)
                 conn.commit()
             except Exception as e:
                 self.logger.error(str(e))
@@ -125,7 +127,7 @@ class DocumentRepository:
         
     def add_documents_to_vector_store(self, documents: List[LangchaincoreDocument]) -> List[str]:
         try:
-            ids = self.pg_vector_store.vector_store.add_documents(documents=documents)
+            ids = self.pg_vector_store.add_documents(documents=documents)
             return ids
         except ValueError:
             return list<str>()
