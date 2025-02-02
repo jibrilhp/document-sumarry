@@ -6,7 +6,7 @@ from entity.project import Project
 from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
 from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from typing import Annotated, List
 import logging
 
@@ -101,13 +101,15 @@ class Routes:
             project_uuid: Annotated[str | None, Form()],
             message: Annotated[str | None, Form()],
             conversation_uuid: Annotated[str | None, Form()],
+            is_stream: Annotated[bool | None, Form()] = False,
             file: UploadFile | None = None):
             try:
                 conversation = Conversation(
                     project_id=project_uuid,
                     conversation_uuid=conversation_uuid,
                     message = message,
-                    tenant_id=tenant_id
+                    tenant_id=tenant_id,
+                    is_stream=is_stream
                 )
                 if file is not None:
                     document = Document(file=file)
@@ -115,8 +117,11 @@ class Routes:
                     document_db = self.document_usecase.store_document(document=document)
                     langchain_document = await self.document_usecase.document_vectorization(document=document_db)
                     conversation.document_from_user = langchain_document
+                
                 response_stream = self.conversation_usecase.chat_with_agent(conversation=conversation)
-                return JSONResponse({"message": response_stream})
+                if conversation.is_stream:
+                    return StreamingResponse(response_stream)    
+                return Response(content=response_stream)
             except Exception as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")

@@ -20,12 +20,22 @@ class ConversationUsecase:
             chatbot = self.chatbot_repository.create_chatbot(conversation.conversation_uuid)
             self.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
-        response = chatbot.invoke(
+        if conversation.is_stream:
+            response = chatbot.stream(
+                input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
+                config=config,
+                stream_mode="values",
+                output_keys="answer"
+            )
+            for r in response:
+                yield r
+        return chatbot.invoke(
             input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
             config=config,
-            stream_mode="values"
+            stream_mode="values",
+            output_keys="answer"
         )
-        return response.get("answer")
+
     
     def get_chat_history(self, conversation: Conversation):
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}

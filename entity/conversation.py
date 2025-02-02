@@ -17,6 +17,7 @@ class Conversation(BaseModel):
     message: str | None = ""
     tenant_id: str | None = ""
     document_from_user: List[Document] | None = None
+    is_stream: bool | None = False
 
 class State(TypedDict):
     context: str
