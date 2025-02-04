@@ -102,7 +102,7 @@ class Routes:
             message: Annotated[str | None, Form()],
             conversation_uuid: Annotated[str | None, Form()],
             is_stream: Annotated[bool | None, Form()] = False,
-            file: UploadFile | None = None):
+            files: List[UploadFile] | None = None):
             try:
                 conversation = Conversation(
                     project_id=project_uuid,
@@ -111,17 +111,19 @@ class Routes:
                     tenant_id=tenant_id,
                     is_stream=is_stream
                 )
-                if file is not None:
-                    document = Document(file=file)
-                    document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                    document_db = self.document_usecase.store_document(document=document)
-                    langchain_document = await self.document_usecase.document_vectorization(document=document_db)
-                    conversation.document_from_user = langchain_document
+                if files is not None:
+                    for file in files:
+                        document = Document(file=file)
+                        document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
+                        document_db = self.document_usecase.store_document(document=document)
+                        langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                        conversation.document_from_user.extend(langchain_document)
                 
-                response_stream = self.conversation_usecase.chat_with_agent(conversation=conversation)
                 if conversation.is_stream:
-                    return StreamingResponse(response_stream)    
-                return Response(content=response_stream)
+                    response_stream = self.conversation_usecase.stream_chat_agent(conversation=conversation)
+                    return StreamingResponse(response_stream)  
+                response = self.conversation_usecase.chat_with_agent(conversation=conversation)
+                return Response(content=response)
             except Exception as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")

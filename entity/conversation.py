@@ -16,7 +16,7 @@ class Conversation(BaseModel):
     conversation_uuid: str | None = ""
     message: str | None = ""
     tenant_id: str | None = ""
-    document_from_user: List[Document] | None = None
+    document_from_user: List[Document] | None = list()
     is_stream: bool | None = False
 
 class State(TypedDict):
@@ -46,11 +46,4 @@ class ConversationalChatbot:
 
     def compile_graph(self, checkpointer: BaseCheckpointSaver) -> CompiledGraph:
         app = self._graph_builder.compile(checkpointer=checkpointer)
-        image_data = app.get_graph().draw_mermaid_png()
-
-        # Convert the image data to a PIL Image object
-        pil_image = PILImage.open(io.BytesIO(image_data))
-
-        # Save the image to a file
-        pil_image.save('output_image.png')
         return app

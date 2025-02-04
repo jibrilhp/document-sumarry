@@ -12,13 +12,28 @@ class ConversationUsecase:
         self.chatbot_repository = chatbot_repository
         self.document_repository = document_repository
 
-    def chat_with_agent(self, conversation: Conversation):
+    def __retrieve_chatbot(self, conversation: Conversation):
         self.logger.info("conversation request with conversation_uuid {}".format(conversation.conversation_uuid))
         chatbot = self.chatbot_repository.get_chatbot(conversation.conversation_uuid)
         if chatbot is None:
             self.logger.info("conversation for {} id is not found".format(conversation.conversation_uuid))
             chatbot = self.chatbot_repository.create_chatbot(conversation.conversation_uuid)
             self.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
+        return chatbot
+
+    def chat_with_agent(self, conversation: Conversation):
+        chatbot = self.__retrieve_chatbot(conversation=conversation)
+        config = {"configurable": {"thread_id": conversation.conversation_uuid}}
+        return chatbot.invoke(
+            input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
+            config=config,
+            stream_mode="values",
+            output_keys="answer"
+        )
+
+    
+    def stream_chat_agent(self, conversation: Conversation):
+        chatbot = self.__retrieve_chatbot(conversation=conversation)
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
         if conversation.is_stream:
             response = chatbot.stream(
@@ -29,14 +44,7 @@ class ConversationUsecase:
             )
             for r in response:
                 yield r
-        return chatbot.invoke(
-            input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
-            config=config,
-            stream_mode="values",
-            output_keys="answer"
-        )
 
-    
     def get_chat_history(self, conversation: Conversation):
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
         chatbot = self.chatbot_repository.get_chatbot(conversation.conversation_uuid)

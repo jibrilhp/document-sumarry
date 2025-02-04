@@ -119,7 +119,9 @@ class ChatBotRepository:
     
     def __should_summarize(self, state: State) -> Literal["fetch_context", "generate_initial_summary"]:
         self.logger.info("on __should_summarize")
-        if state.get("document_from_user") is None:
+        document_from_user = state.get("document_from_user")
+        self.logger.info("document from user {}".format(document_from_user.__len__()))
+        if document_from_user.__len__() == 0:
             self.logger.info("go to fetch_context")
             return "fetch_context"
         self.logger.info("go to generate_initial_summary")

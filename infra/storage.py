@@ -33,8 +33,11 @@ class StorageRepository:
         image = open_image("{}/{}/{}".format(self.__FILE_PATH__, image_db.project_uuid, image_db.document_name))
         text_from_image: str = image_to_string(image=image)
         langchain_images: List[LangchainDocument] = list()
-        langchain_image: LangchainDocument = LangchainDocument(page_content=text_from_image)
-        langchain_image.metadata["tenant_id"] = image_db.tenant_id
-        langchain_image.metadata["project_uuid"] = image_db.project_uuid
-        langchain_images.append(langchain_image)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
+        page_chunks = text_splitter.split_text(text_from_image)
+        for chunk in page_chunks:
+            langchain_image: LangchainDocument = LangchainDocument(page_content=chunk)
+            langchain_image.metadata["tenant_id"] = image_db.tenant_id
+            langchain_image.metadata["project_uuid"] = image_db.project_uuid
+            langchain_images.append(langchain_image)
         return langchain_images
