@@ -16,5 +16,8 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at bigint,
     updated_at bigint,
     projects_uuid VARCHAR REFERENCES projects(uuid),
-    tenant_id int
+    tenant_id varchar
 );
+
+INSERT INTO document_types (id, "name") VALUES(1, 'PDF');
+INSERT INTO public.document_types(id, "name") VALUES(2, 'Image');

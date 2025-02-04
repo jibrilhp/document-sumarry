@@ -1,8 +1,13 @@
-from werkzeug.datastructures import FileStorage
 from static.enum import FileType
 from error.error import UnknownFileType
 from time import time
+from pydantic import BaseModel
+from fastapi import UploadFile as FileStorage
 
+class DocumentRequest(BaseModel):
+    uuid: str | None
+    name: str | None
+    
 class Document:
     def __init__(self, file: FileStorage):
         self.file: FileStorage = file
@@ -23,16 +28,15 @@ class Document:
         self.project_uuid = project_uuid
         self.tenant_id = tenant_id
     
-class DocumentDb(object):
-    def __init__(self, uuid: str="", document_name: str="", is_processed: bool=False, document_type: int=0, created_at: int=0, updated_at: int=0):
-        self.uuid = uuid
-        self.document_name = document_name
-        self.is_processed = is_processed
-        self.document_type = document_type
-        self.created_at = created_at
-        self.updated_at = updated_at
-        self.project_uuid = ""
-        self.tenant_id = ""
+class DocumentDb(BaseModel):
+    uuid : str = ""
+    document_name : str = ""
+    is_processed : bool = False
+    document_type : int = 0
+    created_at : int = 0
+    updated_at : int = 0
+    project_uuid : str = ""
+    tenant_id : str = ""
         
     def set_multinancy_attr(self, project_uuid: str, tenant_id: str):
         self.project_uuid = project_uuid

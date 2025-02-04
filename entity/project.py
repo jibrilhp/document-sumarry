@@ -1,4 +1,5 @@
-class Project:
-    def __init__(self, uuid: str = "", name: str = ""):
-        self.uuid = uuid
-        self.name = name
+from pydantic import BaseModel
+from typing import Optional
+class Project(BaseModel):
+    uuid:  Optional[str] = None
+    name: Optional[str] = None

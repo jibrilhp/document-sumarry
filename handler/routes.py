@@ -1,170 +1,145 @@
-from flask import current_app, request, jsonify, Response
 from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
-from entity.document import Document, DocumentDb, Chat
+from usecase.conversation import ConversationUsecase
+from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
+from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound
-
+from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from typing import Annotated, List
+import logging
 
 class Routes:
-    def __init__(self, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase):
-        current_app.logger.setLevel("INFO")
-        self.app = current_app
+    def __init__(self, app: APIRouter, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: ConversationUsecase):
         self.document_usecase = document_usecase
         self.project_usecase = project_usecase
+        self.conversation_usecase = conversation_usecase
+        self.logger = logging.getLogger(__name__)
+        self.app = app
+        self.setup_router()
 
-        @current_app.route("/v1/documents", methods=["POST"])
-        def upload_document():
+    def setup_router(self):
+        @self.app.get("/v1/documents")
+        async def get_documents(tenant_id: Annotated[str | None, Header()])->List[DocumentDb]:
             try:
-                tenant_id = request.headers["Tenant-Id"]
-                file = request.files["document"]
-                project_uuid = request.form["project"]
-                self.app.logger.info("receive document {}".format(file.filename))
-                document = Document(file=file)
-                document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                self.document_usecase.store_document(document=document)
-                success = {"message": "document upload success"}
-                return jsonify(success)
-            except KeyError as e:
-                self.app.logger.error(str(e))
-                bad_request = {"error": "request is incomplete"}
-                return jsonify(bad_request), 400
-            except FileConflictDb as e:
-                error = {"error": str(e)}
-                return jsonify(error), 409
-
-        @current_app.route("/v1/documents", methods=["GET"])
-        def get_documents():
-            tenant_id = request.headers.get("tenant_id")
-            documentDb = DocumentDb()
-            documentDb.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
-            documents = self.document_usecase.get_document(documentDb)
-            if documents.__len__() == 0:
-                return jsonify({"error": "documents not found"}), 404
-            listOfDocs = list()
-            for document in documents:
-                listOfDocs.append(document.__dict__)
-            return jsonify(listOfDocs)
-
-        @current_app.route("/v1/documents", methods=["DELETE"])
-        def delete_document():
-            try:
-                tenant_id = request.headers.get("Tenant-Id")
-                req = request.get_json()
-                if not req:
-                    return jsonify({"error": "empty request"}), 400
-                document_uuid = req["uuid"]
-                document = DocumentDb(uuid=document_uuid)
-                document.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
-                print(document.__dict__)
-                deleted_document = self.document_usecase.delete_document(document=document)
-                print(deleted_document.__dict__)
-                if deleted_document.uuid == "":
-                    return jsonify({"error": "document not found"}), 404
-                return jsonify({"message":"document with {} uuid is deleted".format(document_uuid)})
-            except ResourceNotFound as e:
-                return jsonify({"error": str(e)}), 404
-            except DatabaseError as e:
-                self.app.logger.error(str(e))
-                return jsonify({"error": "please try again later"}), 500
-            
-        @current_app.route("/v1/vector", methods=["POST"])
-        async def vector_document():
-            try:
-                req = request.get_json()
-                if not req:
-                    return jsonify({"error": "empty request"}), 400
-                document_uuid = req["uuid"]
-                project_uuid = req["project_uuid"]
-                tenant_id = request.headers["Tenant-Id"]
-                document = DocumentDb(uuid=document_uuid)
-                document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                await self.document_usecase.document_vectorization(document=document)
-                return jsonify({"message":"document with {} vectorization is completed".format(document_uuid)})
-            except KeyError as e:
-                return jsonify({"error": "{} not found".format(e)}), 400
-            except ResourceNotFound as e:
-                return jsonify({"error": str(e)}), 404
-            except DatabaseError:
-                return jsonify({"error": "please try again later"})
-            
-        @current_app.route("/v1/chat", methods=["POST"])
-        def chat_generation():
-            try:
-                req = request.get_json()
-                if not req:
-                    return jsonify({"error": "empty request"}), 400
-                user_chat: str = req["chat"]
-                is_stream: bool = req["is_stream"]
-                project_uuid: str = req["project_uuid"]
-                tenant_id: str = request.headers["Tenant-Id"]
-                chat = Chat(chat=user_chat, is_stream=is_stream)
-                chat.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
-                if chat.is_stream:
-                    return Response(
-                        response=self.document_usecase.stream_chat_generation(chat=chat),
-                        content_type="text/plain"
-                    )
-                result = self.document_usecase.chat_generation(chat=chat)
-                return jsonify({"message": result})
+                documentDb = DocumentDb()
+                documentDb.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
+                documents = self.document_usecase.get_document(documentDb)
+                if documents.__len__() == 0:
+                    self.logger.info("document not found")
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+                listOfDocs: List[DocumentDb] = list()
+                for document in documents:
+                    listOfDocs.append(document.__dict__)
+                return listOfDocs
+            except HTTPException as e:
+                raise e
             except Exception as e:
-                self.app.logger.error(str(e))
-                return jsonify({"error": "please try again later"}), 500
-        
-        @current_app.route("/v1/summarize", methods=["POST"])
-        async def summarize_document():
-            try:
-                file = request.files["document"]
-                self.app.logger.info("receive document {}".format(file.filename))
-                document = Document(file=file)
-                response = await self.document_usecase.summarize_document(document=document)
-                return Response(
-                    response=response,
-                    content_type="text/plain"
-                )
-            except KeyError:
-                bad_request = {"error": "filename not found"}
-                return jsonify(bad_request), 400
-        
-        @current_app.route("/v1/projects", methods=["POST"])
-        def create_project():
-            try:
-                req = request.get_json()
-                project_name = req["name"]
-                project = Project(name=project_name)
-                project_uuid = self.project_usecase.create_project(project=project)
-                return jsonify({"uuid":project_uuid})
-            except KeyError:
-                return jsonify({"error": "empty request"})
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
-        @current_app.route("/v1/projects", methods=["GET"])
-        def get_projects():
+        @self.app.delete("v1/documents")
+        async def delete_document(tenant_id: Annotated[str | None, Header()], document_req: DocumentRequest):
+            try:
+                document = DocumentDb(uuid=document_req.uuid)
+                document.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
+                deleted_document = self.document_usecase.delete_document(document=document)
+                if deleted_document.uuid == "":
+                    self.logger.info("document not found")
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+                return Response(status_code=status.HTTP_200_OK)
+            except ResourceNotFound as e:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+            except DatabaseError as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "please try again later")
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "please try again later")
+
+        @self.app.post("/v1/projects", status_code=status.HTTP_201_CREATED)
+        async def create_project(project: Project):
+            try:                
+                created_project = self.project_usecase.create_project(project=project)
+                return created_project
+            except FileConflictDb as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_409_CONFLICT, "file already exist in database")
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+
+        @self.app.get("/v1/projects")
+        async def get_projects():
             try:
                 projects = self.project_usecase.get_projects()
                 if projects.__len__() == 0:
-                    return jsonify({"error": "project not found"}), 404
-                listOfProject = list()
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+                listOfProject: List[Project] = list()
                 for project in projects:
-                    listOfProject.append(project.__dict__)
-                return jsonify(listOfProject)
-            except ResourceNotFound as e:
-                return jsonify({"error": str(e)}), 404
+                    listOfProject.append(project)
+                return listOfProject
+            except HTTPException as e:
+                raise e
             except Exception as e:
-                return jsonify({"error": "please try again later"}), 500
-            
-        @current_app.route("/v1/projects", methods=["DELETE"])
-        def delete_project():
-            try:
-                req = request.get_json()
-                uuid = req["uuid"]
-                project = Project(uuid=uuid)
-                self.project_usecase.delete_project(project=project)
-                return jsonify({"message":"ok"})
-            except KeyError:
-                return jsonify({"error": "empty request"}), 400
-            except Exception as e:
-                return jsonify({"error": str(e)}), 500
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
-        @current_app.route("/")
+        @self.app.delete("/v1/projects")
+        def delete_project(project: Project):
+            try:
+                self.project_usecase.delete_project(project=project)
+                return Response(status_code=status.HTTP_200_OK)
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+
+        @self.app.post("/v1/conversation")
+        async def create_chat_session(
+            tenant_id: Annotated[str | None, Header()],
+            project_uuid: Annotated[str | None, Form()],
+            message: Annotated[str | None, Form()],
+            conversation_uuid: Annotated[str | None, Form()],
+            is_stream: Annotated[bool | None, Form()] = False,
+            files: List[UploadFile] | None = None):
+            try:
+                conversation = Conversation(
+                    project_id=project_uuid,
+                    conversation_uuid=conversation_uuid,
+                    message = message,
+                    tenant_id=tenant_id,
+                    is_stream=is_stream
+                )
+                if files is not None:
+                    for file in files:
+                        document = Document(file=file)
+                        document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
+                        document_db = self.document_usecase.store_document(document=document)
+                        langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                        conversation.document_from_user.extend(langchain_document)
+                
+                if conversation.is_stream:
+                    response_stream = self.conversation_usecase.stream_chat_agent(conversation=conversation)
+                    return StreamingResponse(response_stream)  
+                response = self.conversation_usecase.chat_with_agent(conversation=conversation)
+                return Response(content=response)
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+
+        @self.app.get("/v1/conversation/{conversation_uuid}")
+        async def chat_history(
+            tenant_id: Annotated[str | None, Header()],
+            conversation_uuid: str
+        ) -> List[ConversationState]:
+            try:
+                conversation = Conversation(tenant_id=tenant_id, conversation_uuid=conversation_uuid)
+                return self.conversation_usecase.get_chat_history(conversation)
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+            
+        @self.app.get("/")
         def index():
             return "<p>welcome to document summarisation tools</p>"

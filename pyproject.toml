@@ -5,12 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "flask[async]>=3.1.0",
+    "fastapi[standard]>=0.115.8",
     "langchain>=0.3.14",
     "langchain-community>=0.3.14",
     "langchain-core>=0.3.30",
+    "langchain-google-genai>=2.0.9",
     "langchain-ollama>=0.2.2",
     "langchain-postgres>=0.0.12",
+    "langgraph>=0.2.67",
+    "langgraph-checkpoint-postgres>=2.0.13",
     "psycopg2-binary>=2.9.10",
     "pypdf>=5.1.0",
+    "pytesseract>=0.3.13",
 ]
