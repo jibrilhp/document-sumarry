@@ -51,7 +51,7 @@ class ChatBotRepository:
     
     def __create_summary_refinement_chain(self):
         refine_template = """
-            Buatkan sebuah ringkasan akhir
+            Buatkan sebuah ringkasan yang sangat singkat akhir
 
             Ringkasan saat ini adalah:
             {existing_answer}
@@ -60,8 +60,8 @@ class ChatBotRepository:
             ------------
             {context}
             ------------
-
-            Dengan konteks baru, perbaiki ringkasan awal
+            Buatlah ringkasan sangat singkat berdasarkan ringkasan saat ini dan konteks baru.
+            Usahakan agar tidak ada informasi berulang di ringkasan baru.
         """
         refine_prompt = ChatPromptTemplate([("human", refine_template)])
         return refine_prompt | self.generative_adapter.chat_model | StrOutputParser()
