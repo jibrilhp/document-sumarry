@@ -1,0 +1,14 @@
+services:
+  document-summarisation-tools:
+    container_name: dst-app
+    env_file:
+      - secret.env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
+    driver: local

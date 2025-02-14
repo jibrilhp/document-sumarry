@@ -3,26 +3,28 @@ version: "3.8"
 services:
   document-summarisation-tools:
     container_name: dst-app
+    env_file:
+      - secret.env
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "8000:8000"
     depends_on:
       - postgres
     networks:
       - dst-networks
   postgres:
-    image: pgvector/pgvector:pg16  # Official image with pgvector pre-installed
+    image: pgvector/pgvector:pg16 # Official image with pgvector pre-installed
     container_name: document_pg_vector
     environment:
-      POSTGRES_USER: admin          # Set your PostgreSQL username
-      POSTGRES_PASSWORD: password   # Set your PostgreSQL password
-      POSTGRES_DB: mydatabase       # Set your default database name
+      POSTGRES_USER: admin # Set your PostgreSQL username
+      POSTGRES_PASSWORD: password # Set your PostgreSQL password
+      POSTGRES_DB: mydatabase # Set your default database name
     ports:
-      - "5432:5432"                 # Expose PostgreSQL on port 5432
+      - "5432:5432" # Expose PostgreSQL on port 5432
     volumes:
-      - pgdata:/var/lib/postgresql/data  # Mount volume for data persistence
+      - pgdata:/var/lib/postgresql/data # Mount volume for data persistence
     networks:
       - dst-networks
 
