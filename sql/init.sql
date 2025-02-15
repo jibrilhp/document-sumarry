@@ -20,4 +20,4 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 INSERT INTO document_types (id, "name") VALUES(1, 'PDF');
-INSERT INTO public.document_types(id, "name") VALUES(2, 'Image');
+INSERT INTO document_types(id, "name") VALUES(2, 'Image');

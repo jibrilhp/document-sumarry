@@ -24,7 +24,7 @@ router = APIRouter()
 
 logging.info("setup application...")
 settings = Settings()
-generative_adapter = GenerativeAdapter()
+generative_adapter = GenerativeAdapter(settings)
 postgres_adapter = PostgresAdapter(settings, generative_adapter.embedding_model)
 documentRepository = DocumentRepository(db=postgres_adapter)
 project_repository = ProjectRepository(db=postgres_adapter)

@@ -10,5 +10,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str
     CHAT_MODEL_NAME: str
     COLLECTION_NAME: str
+    LLM_PROVIDER: str
+    OLLAMA_BASE_URL: str
 
     model_config = SettingsConfigDict(env_file=".env")
