@@ -21,7 +21,7 @@ class GenerativeAdapter:
                 base_url=settings.OLLAMA_BASE_URL
             )
         elif settings.LLM_PROVIDER == "google":
-            self.embedding_model = GoogleGenerativeAIEmbeddings(model=settings.LLM_PROVIDER)
-            self.chat_model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+            self.embedding_model = GoogleGenerativeAIEmbeddings(model=settings.EMBEDDING_MODEL_NAME)
+            self.chat_model = ChatGoogleGenerativeAI(model=settings.CHAT_MODEL_NAME)
         else:
             raise ValueError("Invalid LLM provider")
