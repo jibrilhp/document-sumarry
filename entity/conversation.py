@@ -26,6 +26,8 @@ class State(TypedDict):
     index: int
     document_from_user: List[Document]
     conversation: Annotated[list, add_messages]
+    tenant_id: str
+    project_uuid: str
 
 class ConversationState(BaseModel):
     question: str | None = ""

@@ -81,7 +81,7 @@ class DocumentRepository:
         with self.db_adapter.get_connection() as conn:
             try:
                 sql = "INSERT INTO documents(uuid, document_name, is_processed, document_type_id, created_at, updated_at, projects_uuid, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"
-                uid = uuid5(NAMESPACE_X500, document.file.filename).__str__()
+                uid = uuid5(NAMESPACE_X500, document.file.filename + document.project_uuid + document.tenant_id).__str__()
                 data = (
                 uid , document.file.filename, False, document.file_type, time(), time(), document.project_uuid, document.tenant_id
                 )

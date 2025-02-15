@@ -25,7 +25,13 @@ class ConversationUsecase:
         chatbot = self.__retrieve_chatbot(conversation=conversation)
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
         return chatbot.invoke(
-            input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
+            input={"conversation": [{
+                "role": "user", "content": conversation.message,
+                }], 
+                "document_from_user": conversation.document_from_user,
+                "tenant_id": conversation.tenant_id,
+                "project_uuid": conversation.project_id,
+                },
             config=config,
             stream_mode="values",
             output_keys="answer"
@@ -37,7 +43,14 @@ class ConversationUsecase:
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
         if conversation.is_stream:
             response = chatbot.stream(
-                input={"conversation": [{"role": "user", "content": conversation.message}], "document_from_user": conversation.document_from_user},
+                input={"conversation": [{
+                    "role": "user", 
+                    "content": conversation.message,
+                    }], 
+                    "document_from_user": conversation.document_from_user,
+                    "tenant_id": conversation.tenant_id,
+                    "project_uuid": conversation.project_id,
+                    },
                 config=config,
                 stream_mode="values",
                 output_keys="answer"

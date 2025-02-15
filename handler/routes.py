@@ -119,6 +119,9 @@ class Routes:
                         langchain_document = await self.document_usecase.document_vectorization(document=document_db)
                         conversation.document_from_user.extend(langchain_document)
                 
+                conversation.project_id = project_uuid
+                conversation.tenant_id = tenant_id
+                print(conversation)
                 if conversation.is_stream:
                     response_stream = self.conversation_usecase.stream_chat_agent(conversation=conversation)
                     return StreamingResponse(response_stream)  

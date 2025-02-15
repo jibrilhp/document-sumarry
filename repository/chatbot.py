@@ -128,9 +128,11 @@ class ChatBotRepository:
         return "generate_initial_summary"
 
     def __fetch_context(self, state: State) -> State:
-        relevant_docs_with_score = self.pgvector.similarity_search_with_relevance_scores(
+        filterArgs = {"tenant_id": state.get("tenant_id"), "project_uuid": state.get("project_uuid")}
+        print(filterArgs)
+        relevant_docs_with_score = self.pgvector.similarity_search_with_score(
             query=state.get("conversation")[-1].content,
-            score_threshold=0.6
+            filter=filterArgs
         )
         context = "\n".join([similiar_document[0].page_content for similiar_document in relevant_docs_with_score])
         return {"context": context}
