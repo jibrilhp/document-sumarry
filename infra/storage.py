@@ -1,3 +1,4 @@
+import re
 from entity.document import Document, DocumentDb
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document as LangchainDocument
@@ -20,15 +21,29 @@ class StorageRepository:
     async def load_pdf_document_with_langchain(self, document: DocumentDb)-> List[LangchainDocument]:
         loader = PyPDFLoader("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.document_name))
         pages: List[LangchainDocument] = list()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500_000, chunk_overlap=10_000)
         iter_document = loader.lazy_load()
         page_chunks = text_splitter.split_documents(iter_document)
+        before_clean = 0
+        after_clean = 0
         for page_chunk in page_chunks:
+            before_clean += page_chunk.page_content.__len__()
+            cleaned_text = self.clean_text(page_chunk.page_content)
+            after_clean += cleaned_text.__len__()
+            page_chunk.page_content = self.clean_text(page_chunk.page_content)
             page_chunk.metadata["tenant_id"] = document.tenant_id
             page_chunk.metadata["project_uuid"] = document.project_uuid
             pages.append(page_chunk)
+        print("before clean: {} char, after clean {}".format(before_clean, after_clean))
         return pages
     
+    def clean_text(self, text: str):
+        print(text.__len__())
+        text = re.sub(r'\s+', ' ', text).strip()
+        print(text.__len__())
+        return text
+
+
     def load_image_with_langchain(self, image_db: DocumentDb) -> List[LangchainDocument]:
         image = open_image("{}/{}/{}".format(self.__FILE_PATH__, image_db.project_uuid, image_db.document_name))
         text_from_image: str = image_to_string(image=image)
