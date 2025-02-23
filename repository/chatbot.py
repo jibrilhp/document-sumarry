@@ -70,8 +70,8 @@ class ChatBotRepository:
         template = """
             Anda adalah pembantu yang handal dan punya pekerjaan untuk membantu pengguna dan meringkas dokumen.
             Anda bisa mendiskusikan konten dari dokumen dengan konteks berikut {context} atau anda bisa gunakan informasi dari percakapan berikut {conversation}.
-            Apabila pengguna mengguna
-            Jawab pertanyaan ini {question}  
+            Apabila informasi konteks dan percakapan tidak ada, jawab "maaf saya tidak dapat membantu anda untuk menjawab pertanyaan Anda".
+            Anda hanya boleh menggunakan informasi dari konteks dan percakapan untuk menjawab pertanyaan berikut {question}
         """
         answer_prompt = ChatPromptTemplate([("human", template)])
         return answer_prompt | self.generative_adapter.chat_model | StrOutputParser()
@@ -97,6 +97,8 @@ class ChatBotRepository:
     
     def __generate_chat_response(self, state: State):
         self.logger.info("on __generate_chat_response")
+        self.logger.info("context {}".format(state["context"]))
+        self.logger.info("conversation {}".format(state["conversation"]))
         chain = self.__create_answer_chain()
         answer = chain.invoke(
           {    
@@ -105,7 +107,6 @@ class ChatBotRepository:
             "context": state["context"]
           }
         )
-        self.logger.info(answer)
         return {"answer": answer}
     
     def __should_refine(self, state: State) -> Literal["refine_summary", "add_answer_to_conversation"]:
