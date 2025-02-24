@@ -24,7 +24,7 @@ class ConversationUsecase:
     def chat_with_agent(self, conversation: Conversation):
         chatbot = self.__retrieve_chatbot(conversation=conversation)
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
-        return chatbot.invoke(
+        response = chatbot.invoke(
             input={"conversation": [{
                 "role": "user", "content": conversation.message,
                 }], 
@@ -34,8 +34,10 @@ class ConversationUsecase:
                 },
             config=config,
             stream_mode="values",
-            output_keys="answer"
+            output_keys=["answer", "request_token_count", "response_token_count"]
         )
+        print(response)
+        return response.get("answer")
 
     
     def stream_chat_agent(self, conversation: Conversation):
@@ -53,10 +55,11 @@ class ConversationUsecase:
                     },
                 config=config,
                 stream_mode="values",
-                output_keys="answer"
+                output_keys=["answer", "request_token_count", "response_token_count"]
             )
             for r in response:
-                yield r
+                print(r)
+                yield r.get("answer")
 
     def get_chat_history(self, conversation: Conversation):
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}

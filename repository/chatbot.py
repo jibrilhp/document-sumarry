@@ -81,8 +81,11 @@ class ChatBotRepository:
         summary = self.__create_initial_summary_chain().invoke(
               input=state["document_from_user"][0],
               config=config,
-          )
-        return {"answer": summary, "index": 1}
+        )
+        request_token = self.generative_adapter.chat_model.get_num_tokens(state["document_from_user"][0].page_content)
+        response_token = self.generative_adapter.chat_model.get_num_tokens(summary)
+        self.logger.info("request token: {}, response token: {}".format(request_token, response_token))
+        return {"answer": summary, "index": 1, "request_token_count": request_token, "response_token_count": response_token}
     
     def __generate_summary_refinement(self, state: State, config: RunnableConfig):
         self.logger.info("on __generate_summary_refinement")
@@ -93,7 +96,11 @@ class ChatBotRepository:
                 },
                 config=config
         )
-        return  {"answer": refined_summary, "index": state["index"] + 1}
+        request_token = self.generative_adapter.chat_model.get_num_tokens(state["document_from_user"][state["index"]].page_content)
+        request_token += self.generative_adapter.chat_model.get_num_tokens(state["answer"]) + state.get("request_token_count")
+        response_token = self.generative_adapter.chat_model.get_num_tokens(refined_summary) + state.get("response_token_count")
+        self.logger.info("request token: {}, response token: {}".format(request_token, response_token))
+        return  {"answer": refined_summary, "index": state["index"] + 1, "request_token_count": request_token, "response_token_count": response_token}
     
     def __generate_chat_response(self, state: State):
         self.logger.info("on __generate_chat_response")
@@ -107,7 +114,10 @@ class ChatBotRepository:
             "context": state["context"]
           }
         )
-        return {"answer": answer}
+        request_token = self.generative_adapter.chat_model.get_num_tokens_from_messages(state["conversation"]) + state.get("request_token_count")
+        response_token = self.generative_adapter.chat_model.get_num_tokens(answer) + state.get("response_token_count")
+        self.logger.info("request token: {}, response token: {}".format(request_token, response_token))
+        return {"answer": answer, "request_token_count": request_token, "response_token_count": response_token}
     
     def __should_refine(self, state: State) -> Literal["refine_summary", "add_answer_to_conversation"]:
         self.logger.info("on __should_refine")
@@ -130,7 +140,6 @@ class ChatBotRepository:
 
     def __fetch_context(self, state: State) -> State:
         filterArgs = {"tenant_id": state.get("tenant_id"), "project_uuid": state.get("project_uuid")}
-        print(filterArgs)
         relevant_docs_with_score = self.pgvector.similarity_search_with_score(
             query=state.get("conversation")[-1].content,
             filter=filterArgs
@@ -150,7 +159,6 @@ class ChatBotRepository:
             return []
 
         for idx, v in enumerate(conversation_state_value, start=1):
-            print(v)
             if idx % 2 == 1:
                 conversation = ConversationState()
                 conversation.question = v.content

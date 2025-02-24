@@ -28,6 +28,8 @@ class State(TypedDict):
     conversation: Annotated[list, add_messages]
     tenant_id: str
     project_uuid: str
+    request_token_count: int
+    response_token_count: int
 
 class ConversationState(BaseModel):
     question: str | None = ""

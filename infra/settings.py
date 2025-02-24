@@ -12,5 +12,6 @@ class Settings(BaseSettings):
     COLLECTION_NAME: str
     LLM_PROVIDER: str
     OLLAMA_BASE_URL: str
+    MAX_FILE_SIZE_IN_MB: int
 
     model_config = SettingsConfigDict(env_file=".env")

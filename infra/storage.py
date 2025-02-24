@@ -38,9 +38,7 @@ class StorageRepository:
         return pages
     
     def clean_text(self, text: str):
-        print(text.__len__())
         text = re.sub(r'\s+', ' ', text).strip()
-        print(text.__len__())
         return text
 
 

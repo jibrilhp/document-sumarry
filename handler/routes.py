@@ -4,20 +4,23 @@ from usecase.conversation import ConversationUsecase
 from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState
-from error.error import FileConflictDb, DatabaseError, ResourceNotFound
+from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge
 from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from typing import Annotated, List
 import logging
+import magic
+from infra.settings import Settings
 
 class Routes:
-    def __init__(self, app: APIRouter, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: ConversationUsecase):
+    def __init__(self, app: APIRouter, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: ConversationUsecase, settings: Settings):
         self.document_usecase = document_usecase
         self.project_usecase = project_usecase
         self.conversation_usecase = conversation_usecase
         self.logger = logging.getLogger(__name__)
         self.app = app
         self.setup_router()
+        self.MAX_FILE_SIZE_IN_MB = settings.MAX_FILE_SIZE_IN_MB
 
     def setup_router(self):
         @self.app.get("/v1/documents")
@@ -111,7 +114,9 @@ class Routes:
                     tenant_id=tenant_id,
                     is_stream=is_stream
                 )
+                
                 if files is not None:
+                    __check_file_validity(files)
                     for file in files:
                         document = Document(file=file)
                         document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
@@ -121,15 +126,33 @@ class Routes:
                 
                 conversation.project_id = project_uuid
                 conversation.tenant_id = tenant_id
-                print(conversation)
                 if conversation.is_stream:
                     response_stream = self.conversation_usecase.stream_chat_agent(conversation=conversation)
                     return StreamingResponse(response_stream)  
                 response = self.conversation_usecase.chat_with_agent(conversation=conversation)
                 return Response(content=response)
+            except FileTooLarge as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(e))
+            except UnknownFileType as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
             except Exception as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+            
+        def __check_file_validity(uploaded_files: List[UploadFile]):
+            for file in uploaded_files:
+                if file.size > self.MAX_FILE_SIZE_IN_MB * 1024 * 1025:
+                    raise FileTooLarge("file is larger than {} MB".format(self.MAX_FILE_SIZE_IN_MB))
+                content_type_buf = magic.from_buffer(file.file.read(4096), mime=True)
+                content_type_ext = file.content_type
+                self.logger.info("filename {} content-type from extension {}, content-type from binary properties {}".format(
+                    file.filename, content_type_ext, content_type_buf,
+                ))
+                if content_type_buf != content_type_ext:
+                    raise UnknownFileType("file type mismatch. extension: {}, binary's property: {}".format(content_type_ext, content_type_buf))
+
 
         @self.app.get("/v1/conversation/{conversation_uuid}")
         async def chat_history(

@@ -14,7 +14,9 @@ dependencies = [
     "langchain-postgres>=0.0.12",
     "langgraph>=0.2.67",
     "langgraph-checkpoint-postgres>=2.0.13",
+    "prometheus-fastapi-instrumentator>=7.0.2",
     "psycopg2-binary>=2.9.10",
     "pypdf>=5.1.0",
     "pytesseract>=0.3.13",
+    "python-magic>=0.4.27",
 ]

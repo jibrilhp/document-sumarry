@@ -15,3 +15,8 @@ class DatabaseError(Exception):
 class ResourceNotFound(Exception):
     def __init__(self, message):
         super().__init__(message)
+
+
+class FileTooLarge(Exception):
+    def __init__(self, message):
+        super().__init__(message)
