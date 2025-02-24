@@ -97,8 +97,8 @@ class ChatBotRepository:
                 config=config
         )
         request_token = self.generative_adapter.chat_model.get_num_tokens(state["document_from_user"][state["index"]].page_content)
-        request_token += self.generative_adapter.chat_model.get_num_tokens(state["answer"]) + state.get("request_token_count")
-        response_token = self.generative_adapter.chat_model.get_num_tokens(refined_summary) + state.get("response_token_count")
+        request_token += self.generative_adapter.chat_model.get_num_tokens(state["answer"]) + state.get("request_token_count", 0)
+        response_token = self.generative_adapter.chat_model.get_num_tokens(refined_summary) + state.get("response_token_count", 0)
         self.logger.info("request token: {}, response token: {}".format(request_token, response_token))
         return  {"answer": refined_summary, "index": state["index"] + 1, "request_token_count": request_token, "response_token_count": response_token}
     
@@ -114,8 +114,8 @@ class ChatBotRepository:
             "context": state["context"]
           }
         )
-        request_token = self.generative_adapter.chat_model.get_num_tokens_from_messages(state["conversation"]) + state.get("request_token_count")
-        response_token = self.generative_adapter.chat_model.get_num_tokens(answer) + state.get("response_token_count")
+        request_token = self.generative_adapter.chat_model.get_num_tokens_from_messages(state["conversation"]) + state.get("request_token_count", 0)
+        response_token = self.generative_adapter.chat_model.get_num_tokens(answer) + state.get("response_token_count", 0)
         self.logger.info("request token: {}, response token: {}".format(request_token, response_token))
         return {"answer": answer, "request_token_count": request_token, "response_token_count": response_token}
     
