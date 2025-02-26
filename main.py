@@ -22,11 +22,6 @@ logging.getLogger(__name__)
 app = FastAPI()
 router = APIRouter()
 instrumentator = Instrumentator()
-instrumentator.add(
-    request_token_counter()  # Your custom metric functions
-).add(
-    response_token_counter()
-)
 instrumentator.instrument(app).expose(app)  # Instrument before defining routes
 
 # NOW you can add custom metrics
