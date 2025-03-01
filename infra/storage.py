@@ -15,8 +15,6 @@ class StorageRepository:
 
     def store_document(self, document: Document):
         Path("{}/{}".format(self.__FILE_PATH__, document.project_uuid)).mkdir(parents=True, exist_ok=True)
-        # with open("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename), "wb") as buffer:
-        #     shutil.copyfileobj(document.file.file, buffer)  # Efficient file streaming
         document.file.file.seek(0)
         file_loc = "{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename)
         with open(file_loc, "wb") as out:
