@@ -104,7 +104,6 @@ class ChatBotRepository:
     
     def __generate_chat_response(self, state: State):
         self.logger.info("on __generate_chat_response")
-        self.logger.info("context {}".format(state["context"]))
         self.logger.info("conversation {}".format(state["conversation"]))
         chain = self.__create_answer_chain()
         answer = chain.invoke(

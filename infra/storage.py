@@ -1,13 +1,13 @@
 import re
 from entity.document import Document, DocumentDb
-from langchain_community.document_loaders import PyPDFLoader
+from pypdf import PdfReader
 from langchain_core.documents import Document as LangchainDocument
 from typing import List
 from pathlib import Path
 from PIL.Image import open as open_image
 from pytesseract.pytesseract import image_to_string
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import shutil
+import logging
 
 class StorageRepository:
     def __init__(self):
@@ -15,27 +15,26 @@ class StorageRepository:
 
     def store_document(self, document: Document):
         Path("{}/{}".format(self.__FILE_PATH__, document.project_uuid)).mkdir(parents=True, exist_ok=True)
-        with open("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename), "wb") as buffer:
-            shutil.copyfileobj(document.file.file, buffer)  # Efficient file streaming
+        # with open("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename), "wb") as buffer:
+        #     shutil.copyfileobj(document.file.file, buffer)  # Efficient file streaming
+        document.file.file.seek(0)
+        file_loc = "{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.file.filename)
+        with open(file_loc, "wb") as out:
+            out.write(document.file.file.read())
 
     async def load_pdf_document_with_langchain(self, document: DocumentDb)-> List[LangchainDocument]:
-        loader = PyPDFLoader("{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.document_name))
-        pages: List[LangchainDocument] = list()
+        file_path = "{}/{}/{}".format(self.__FILE_PATH__, document.project_uuid, document.document_name)
+        logging.info("load pdf from {}".format(file_path))
+        reader = PdfReader(file_path)
+        extracted_text: str = ""
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500_000, chunk_overlap=10_000)
-        iter_document = loader.lazy_load()
-        page_chunks = text_splitter.split_documents(iter_document)
-        before_clean = 0
-        after_clean = 0
-        for page_chunk in page_chunks:
-            before_clean += page_chunk.page_content.__len__()
-            cleaned_text = self.clean_text(page_chunk.page_content)
-            after_clean += cleaned_text.__len__()
-            page_chunk.page_content = self.clean_text(page_chunk.page_content)
-            page_chunk.metadata["tenant_id"] = document.tenant_id
-            page_chunk.metadata["project_uuid"] = document.project_uuid
-            pages.append(page_chunk)
-        print("before clean: {} char, after clean {}".format(before_clean, after_clean))
-        return pages
+        metadatas: List[dict] = list()
+        for page in reader.pages:
+            extracted_text += self.clean_text(page.extract_text())
+            metadatas.append({"tenant_id": document.tenant_id, "project_uuid": document.project_uuid})
+        splitted_texts = text_splitter.split_text(extracted_text)
+        documents = text_splitter.create_documents(splitted_texts, metadatas)
+        return documents
     
     def clean_text(self, text: str):
         text = re.sub(r'\s+', ' ', text).strip()
