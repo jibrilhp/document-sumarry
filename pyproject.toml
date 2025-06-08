@@ -19,4 +19,5 @@ dependencies = [
     "pypdf>=5.1.0",
     "pytesseract>=0.3.13",
     "python-magic>=0.4.27",
+    "pandas>=2.3.0"
 ]
