@@ -37,20 +37,31 @@ class DocumentUsecase:
     async def document_vectorization(self, document: DocumentDb):
         document_from_db = self.document_repository.get_document(document=document)
         self.logger.info("document from db name {}, type {}".format(document_from_db.document_name, document_from_db.document_type))
+        
+        langchain_document: List[LangchainDocument] | None = None
+
         if document_from_db.document_type == FileType.PDF_DOCUMENT.value:
             langchain_document = await self.storage_repository.load_pdf_document_with_langchain(document=document_from_db)
-            self.logger.info("pdf loaded with langchain, length {}".format(langchain_document.__len__()) )
-            return self.__process_document(document_db=document_from_db, langchain_document=langchain_document)
-        if document_from_db.document_type == FileType.IMAGE_DOCUMENT.value:
+            self.logger.info("pdf loaded with langchain, length {}".format(len(langchain_document)))
+
+        elif document_from_db.document_type == FileType.IMAGE_DOCUMENT.value:
             langchain_document = self.storage_repository.load_image_with_langchain(image_db=document_from_db)
-            self.logger.info("image loaded with langchain, length {}".format(langchain_document.__len__()))
+            self.logger.info("image loaded with langchain, length {}".format(len(langchain_document)))
+
+        elif document_from_db.document_type == FileType.CSV_DOCUMENT.value:
+            langchain_document = self.storage_repository.load_csv_document_with_langchain(document=document_from_db)
+            self.logger.info("csv loaded with langchain, length {}".format(len(langchain_document)))
+        
+        if langchain_document:
             return self.__process_document(document_db=document_from_db, langchain_document=langchain_document)
         
-    def __process_document(self, document_db: DocumentDb, langchain_document: List[Document]):
+    def __process_document(self, document_db: DocumentDb, langchain_document: List[LangchainDocument]):
             if document_db.is_processed:
+                self.logger.info("Document {} already processed.".format(document_db.document_name))
                 return langchain_document
+                
             vectorized_ids = self.document_repository.add_documents_to_vector_store(langchain_document)
-            self.logger.info("vectorized id length {}".format(vectorized_ids.__len__()))
+            self.logger.info("vectorized id length {}".format(len(vectorized_ids)))
             document_db.is_processed = True
             self.document_repository.update_document(document=document_db)
             return langchain_document

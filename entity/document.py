@@ -22,6 +22,8 @@ class Document:
             return FileType.PDF_DOCUMENT.value
         if file_name.endswith(".png") or file_name.endswith(".jpg") or file_name.endswith(".jpeg"):
             return FileType.IMAGE_DOCUMENT.value
+        if file_name.endswith(".csv"):
+            return FileType.CSV_DOCUMENT.value
         raise UnknownFileType(message="invalid file type", file_type=file_name)
     
     def set_multinancy_attr(self, project_uuid: str, tenant_id: str):
