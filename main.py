@@ -1,14 +1,12 @@
 from fastapi import FastAPI, APIRouter
-from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
-from prometheus_client import Counter
 from infra.logging import setup_logging
 from infra.settings import Settings
 from infra.data_store import PostgresAdapter
 from infra.storage import StorageRepository
 from infra.generative_provider import GenerativeAdapter
-from infra.instrumentation import request_token_counter, response_token_counter
 from repository.document import DocumentRepository     
 from repository.project import ProjectRepository
 from repository.chatbot import ChatBotRepository
@@ -33,10 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 router = APIRouter()
-instrumentator = Instrumentator()
-instrumentator.instrument(app).expose(app)  # Instrument before defining routes
-
-# NOW you can add custom metrics
 
 
 logging.info("setup application...")
@@ -50,5 +44,5 @@ chatbot_repository = ChatBotRepository(postgres_adapter=postgres_adapter, genera
 document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=generative_adapter)
 project_usecase = ProjectUsecase(project_repository=project_repository)
 conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository)
-routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase, settings=settings)
+routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase)
 app.include_router(router=router)
