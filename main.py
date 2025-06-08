@@ -1,5 +1,7 @@
 from fastapi import FastAPI, APIRouter
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
+from fastapi.middleware.cors import CORSMiddleware
+
 from prometheus_client import Counter
 from infra.logging import setup_logging
 from infra.settings import Settings
@@ -20,6 +22,16 @@ setup_logging()
 logging.getLogger(__name__)
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "*",  # Alternative localhost
+        # Add other allowed origins as needed
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 router = APIRouter()
 instrumentator = Instrumentator()
 instrumentator.instrument(app).expose(app)  # Instrument before defining routes
