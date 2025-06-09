@@ -718,6 +718,7 @@ class ChatBotRepository:
             Pertanyaan pengguna: {question}
 
             Silakan analisis dan berikan jawaban yang komprehensif dengan query SQL yang sesuai.
+            Buat output dalam bentuk tabel jika memungkinkan
             """
         else:
             enhanced_question = question
