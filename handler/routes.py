@@ -165,7 +165,7 @@ class Routes:
             except Exception as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
-
+            
         @self.app.get("/v1/download/{project_uuid}/{filename}")
         async def download_file(
             project_uuid: str,
