@@ -6,11 +6,13 @@ from entity.project import Project
 from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge
 from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
 from typing import Annotated, List
 import logging
 import magic
 from infra.settings import Settings
+import os
+from pathlib import Path
 
 class Routes:
     def __init__(self, app: APIRouter, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: ConversationUsecase, settings: Settings):
@@ -21,6 +23,9 @@ class Routes:
         self.app = app
         self.setup_router()
         self.MAX_FILE_SIZE_IN_MB = settings.MAX_FILE_SIZE_IN_MB
+        # Define a secure base directory for file storage.
+        self.STORAGE_BASE_DIR = Path(settings.STORAGE_PATH or "/app/storage").resolve()
+
 
     def setup_router(self):
         @self.app.get("/v1/documents")
@@ -29,12 +34,10 @@ class Routes:
                 documentDb = DocumentDb()
                 documentDb.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
                 documents = self.document_usecase.get_document(documentDb)
-                if documents.__len__() == 0:
+                if not documents:
                     self.logger.info("document not found")
                     raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
-                listOfDocs: List[DocumentDb] = list()
-                for document in documents:
-                    listOfDocs.append(document.__dict__)
+                listOfDocs: List[DocumentDb] = [doc.__dict__ for doc in documents]
                 return listOfDocs
             except HTTPException as e:
                 raise e
@@ -42,24 +45,24 @@ class Routes:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
-        @self.app.delete("v1/documents")
+        @self.app.delete("/v1/documents")
         async def delete_document(tenant_id: Annotated[str | None, Header()], document_req: DocumentRequest):
             try:
                 document = DocumentDb(uuid=document_req.uuid)
                 document.set_multinancy_attr(project_uuid="", tenant_id=tenant_id)
                 deleted_document = self.document_usecase.delete_document(document=document)
                 if deleted_document.uuid == "":
-                    self.logger.info("document not found")
-                    raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+                    self.logger.info("document not found for deletion")
+                    raise ResourceNotFound("document not found")
                 return Response(status_code=status.HTTP_200_OK)
-            except ResourceNotFound as e:
+            except ResourceNotFound:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
             except DatabaseError as e:
                 self.logger.error(str(e))
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "please try again later")
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "database error, please try again later")
             except Exception as e:
                 self.logger.error(str(e))
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "please try again later")
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "an unexpected error occurred, please try again later")
 
         @self.app.post("/v1/projects", status_code=status.HTTP_201_CREATED)
         async def create_project(project: Project):
@@ -77,12 +80,9 @@ class Routes:
         async def get_projects():
             try:
                 projects = self.project_usecase.get_projects()
-                if projects.__len__() == 0:
-                    raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
-                listOfProject: List[Project] = list()
-                for project in projects:
-                    listOfProject.append(project)
-                return listOfProject
+                if not projects:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "no projects found")
+                return projects
             except HTTPException as e:
                 raise e
             except Exception as e:
@@ -115,8 +115,8 @@ class Routes:
                     is_stream=is_stream
                 )
                 
-                if files is not None:
-                    __check_file_validity(files)
+                if files:
+                    self.__check_file_validity(files)
                     for file in files:
                         document = Document(file=file)
                         document.set_multinancy_attr(project_uuid=project_uuid, tenant_id=tenant_id)
@@ -140,19 +140,25 @@ class Routes:
             except Exception as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
-            
+
         def __check_file_validity(uploaded_files: List[UploadFile]):
             for file in uploaded_files:
-                if file.size > self.MAX_FILE_SIZE_IN_MB * 1024 * 1025:
-                    raise FileTooLarge("file is larger than {} MB".format(self.MAX_FILE_SIZE_IN_MB))
-                content_type_buf = magic.from_buffer(file.file.read(4096), mime=True)
+                # Reset file pointer before reading
+                file.file.seek(0)
+                if file.size > self.MAX_FILE_SIZE_IN_MB * 1024 * 1024:
+                    raise FileTooLarge(f"File '{file.filename}' is larger than {self.MAX_FILE_SIZE_IN_MB} MB")
+                
+                # Read a chunk to check content type, then reset pointer again
+                content_chunk = file.file.read(4096)
+                file.file.seek(0)
+
+                content_type_buf = magic.from_buffer(content_chunk, mime=True)
                 content_type_ext = file.content_type
                 self.logger.info("filename {} content-type from extension {}, content-type from binary properties {}".format(
                     file.filename, content_type_ext, content_type_buf,
                 ))
                 if content_type_buf != content_type_ext:
-                    raise UnknownFileType("file type mismatch. extension: {}, binary's property: {}".format(content_type_ext, content_type_buf))
-
+                    raise UnknownFileType(f"File type mismatch for '{file.filename}'. Extension implies: {content_type_ext}, but content is: {content_type_buf}")
 
         @self.app.get("/v1/conversation/{conversation_uuid}")
         async def chat_history(
@@ -166,6 +172,47 @@ class Routes:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
             
+        @self.app.get("/v1/download/{project_uuid}/{filename}")
+        async def download_file(
+            project_uuid: str,
+            filename: str,
+            tenant_id: Annotated[str, Header()]
+        ):
+            """
+            Securely downloads a file for a given tenant and project.
+            Prevents path traversal attacks.
+            """
+            try:
+                if not tenant_id or not project_uuid:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant-Id and Project-UUID are required.")
+
+                # Construct the expected directory for the tenant and project.
+                # This helps in scoping the file access.
+                project_dir = self.STORAGE_BASE_DIR / tenant_id / project_uuid
+                
+                # Construct the full path to the requested file.
+                file_path = (project_dir / filename).resolve()
+
+                # **Security Check**: Verify that the resolved file path is within the designated project directory.
+                # This is the core of preventing directory traversal attacks.
+                if not file_path.is_relative_to(project_dir.resolve()):
+                    self.logger.warning(f"Path traversal attempt blocked for tenant '{tenant_id}', file '{filename}'")
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+                
+                if not file_path.exists() or not file_path.is_file():
+                    self.logger.info(f"File not found: {file_path}")
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
+
+                return FileResponse(path=file_path, media_type='application/octet-stream', filename=filename)
+
+            except HTTPException as e:
+                # Re-raise HTTPExceptions to let FastAPI handle them.
+                raise e
+            except Exception as e:
+                self.logger.error(f"An error occurred during file download: {e}")
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An internal error occurred.")
+
+
         @self.app.get("/")
         def index():
-            return "<p>welcome to document summarisation tools</p>"
+            return Response(content="<p>welcome to document summarisation tools</p>", media_type="text/html")
