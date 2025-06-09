@@ -44,5 +44,5 @@ chatbot_repository = ChatBotRepository(postgres_adapter=postgres_adapter, genera
 document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=generative_adapter)
 project_usecase = ProjectUsecase(project_repository=project_repository)
 conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository)
-routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase)
+routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase, settings=settings)
 app.include_router(router=router)
