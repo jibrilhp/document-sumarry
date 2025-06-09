@@ -1,4 +1,6 @@
 import logging
+from typing import List
+from error.error import  DatabaseError
 from entity.conversation import Conversation
 from entity.document import Chat
 from repository.chatbot import ChatBotRepository
@@ -61,6 +63,7 @@ class ConversationUsecase:
                 print(r)
                 yield r.get("answer")
 
+    
     def get_chat_history(self, conversation: Conversation):
         config = {"configurable": {"thread_id": conversation.conversation_uuid}}
         chatbot = self.chatbot_repository.get_chatbot(conversation.conversation_uuid)
@@ -69,4 +72,20 @@ class ConversationUsecase:
             chatbot = self.chatbot_repository.create_chatbot(conversation.conversation_uuid)
             self.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
         return self.chatbot_repository.get_chat_history(config, chatbot)
-        
+    
+                                                                                                                                                                                                        
+    def list_conversations(self, conversation_filter: Conversation) -> List[Conversation]:
+        """
+        List conversations based on tenant_id and optionally project_id
+        """
+        try:
+            # This would interact with your database layer
+            # The exact implementation depends on your data access pattern
+            conversations = self.conversation_repository.get_conversations_by_filter(
+                tenant_id=conversation_filter.tenant_id,
+                project_id=conversation_filter.project_id
+            )
+            return conversations
+        except Exception as e:
+            self.logger.error(f"Error listing conversations: {str(e)}")
+            raise DatabaseError("Failed to retrieve conversations")

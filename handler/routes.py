@@ -5,7 +5,7 @@ from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge
-from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form
+from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
 from typing import Annotated, List
 import logging
@@ -152,6 +152,38 @@ class Routes:
                 ))
                 if content_type_buf != content_type_ext:
                     raise UnknownFileType("file type mismatch. extension: {}, binary's property: {}".format(content_type_ext, content_type_buf))
+
+        @self.app.get("/v1/conversations")
+        async def list_conversations(
+            tenant_id: Annotated[str | None, Header()],
+            project_uuid: Annotated[str | None, Query()] = None
+        ) -> List[Conversation]:
+            """
+            List conversations filtered by tenant_id and optionally by project_uuid
+            """
+            try:
+                if not tenant_id:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tenant-Id header is required")
+                
+                # Create conversation filter object
+                conversation_filter = Conversation(
+                    tenant_id=tenant_id,
+                    project_id=project_uuid
+                )
+                
+                conversations = self.conversation_usecase.list_conversations(conversation_filter)
+                
+                if len(conversations) == 0:
+                    self.logger.info("No conversations found for the given criteria")
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "No conversations found")
+                
+                return conversations
+                
+            except HTTPException as e:
+                raise e
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
 
         @self.app.get("/v1/conversation/{conversation_uuid}")
