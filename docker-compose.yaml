@@ -15,7 +15,7 @@ services:
     networks:
       - dst-networks
     volumes:
-      - /home/develop/project/gpt-dtskul/document-summary:/app/storage # Mount local directory to container for data persistence
+      - /home/develop/repository_document_summary:/app/storage # Mount local directory to container for data persistence
   postgres:
     image: pgvector/pgvector:pg16 # Official image with pgvector pre-installed
     container_name: document_pg_vector
