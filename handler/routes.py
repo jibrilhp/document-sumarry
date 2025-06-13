@@ -19,11 +19,13 @@ from infra.settings import Settings
 class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, settings: Settings):
         super().__init__(app)
+        self.__logger = logging.getLogger(__name__)
         self.__settings = settings
 
     async def dispatch(self, request: Request, call_next):
         token = request.headers.get("Authorization")
         if request.url.path.__contains__("/login"):
+            self.__logger.info(f"user={sub} path={request.url.path} method={request.method}")
             return await call_next(request)
         if token is None:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
@@ -33,6 +35,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             sub = payload.get("sub")
             if sub is None:
                 return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
+            
+            self.__logger.info(f"user={sub} path={request.url.path} method={request.method}")
             return await call_next(request)
         except jwt.ExpiredSignatureError:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Token has expired"})
