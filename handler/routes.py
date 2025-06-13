@@ -7,12 +7,40 @@ from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge, UnauthorizedAccess
-from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query
+from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Annotated, List
 import logging
 import magic
+import jwt
 from infra.settings import Settings
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, settings: Settings):
+        super().__init__(app)
+        self.__settings = settings
+
+    async def dispatch(self, request: Request, call_next):
+        token = request.headers.get("Authorization")
+        if request.url.path.__contains__("/login"):
+            return await call_next(request)
+        if token is None:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
+
+        try:
+            payload = jwt.decode(token.replace("Bearer ", ""), self.__settings.SECRET_KEY, algorithms=self.__settings.JWT_ALGORITHM)
+            sub = payload.get("sub")
+            if sub is None:
+                return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
+            return await call_next(request)
+        except jwt.ExpiredSignatureError:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Token has expired"})
+        except jwt.InvalidTokenError:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Invalid token"})
+        except Exception as e:
+            logging.error(f"Error decoding token: {str(e)}")
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
 
 class Routes:
     def __init__(

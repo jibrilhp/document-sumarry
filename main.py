@@ -15,7 +15,7 @@ from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
 from usecase.user import UserUsecase
-from handler.routes import Routes
+from handler.routes import Routes, AuthMiddleware
 import logging
 
 setup_logging()
@@ -49,4 +49,5 @@ project_usecase = ProjectUsecase(project_repository=project_repository)
 conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository)
 user_usecase = UserUsecase(user_repository=user_repository, setting=settings)
 routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase, settings=settings, user_usecase=user_usecase)
+app.add_middleware(AuthMiddleware, settings=settings)
 app.include_router(router=router)
