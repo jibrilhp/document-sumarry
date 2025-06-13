@@ -1,10 +1,12 @@
 from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
+from usecase.user import UserUsecase
+from entity.user import LoginRequest
 from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState
-from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge
+from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge, UnauthorizedAccess
 from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
 from typing import Annotated, List
@@ -13,10 +15,19 @@ import magic
 from infra.settings import Settings
 
 class Routes:
-    def __init__(self, app: APIRouter, document_usecase: DocumentUsecase, project_usecase: ProjectUsecase, conversation_usecase: ConversationUsecase, settings: Settings):
+    def __init__(
+            self, 
+            app: APIRouter, 
+            document_usecase: DocumentUsecase, 
+            project_usecase: ProjectUsecase, 
+            conversation_usecase: ConversationUsecase, 
+            settings: Settings,
+            user_usecase: UserUsecase
+            ):
         self.document_usecase = document_usecase
         self.project_usecase = project_usecase
         self.conversation_usecase = conversation_usecase
+        self.user_usecase = user_usecase
         self.logger = logging.getLogger(__name__)
         self.app = app
         self.setup_router()
@@ -237,6 +248,23 @@ class Routes:
             except Exception as e:
                 self.logger.error(f"An error occurred during file download: {e}")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An internal error occurred.")
+            
+        @self.app.post("/v1/login")
+        def user_login(request: LoginRequest):
+            try:
+                if request.username == "":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username is empty")
+                if request.password == "":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password is empty")
+                user_token = self.user_usecase.user_login(request=request)
+                return user_token
+            except UnauthorizedAccess as e:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str("username or password is incorrect"))
+            except ResourceNotFound as e:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str("username or password is incorrect"))
+            except HTTPException as e:
+                raise
+
 
         @self.app.get("/")
         def index():

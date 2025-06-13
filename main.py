@@ -10,9 +10,11 @@ from infra.generative_provider import GenerativeAdapter
 from repository.document import DocumentRepository     
 from repository.project import ProjectRepository
 from repository.chatbot import ChatBotRepository
+from repository.user import UserRepository
 from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
+from usecase.user import UserUsecase
 from handler.routes import Routes
 import logging
 
@@ -41,8 +43,10 @@ documentRepository = DocumentRepository(db=postgres_adapter)
 project_repository = ProjectRepository(db=postgres_adapter)
 storage_repository = StorageRepository()
 chatbot_repository = ChatBotRepository(postgres_adapter=postgres_adapter, generative_provider=generative_adapter)
+user_repository = UserRepository(db=postgres_adapter)
 document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=generative_adapter)
 project_usecase = ProjectUsecase(project_repository=project_repository)
 conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository)
-routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase, settings=settings)
+user_usecase = UserUsecase(user_repository=user_repository, setting=settings)
+routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase, settings=settings, user_usecase=user_usecase)
 app.include_router(router=router)
