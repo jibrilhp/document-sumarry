@@ -21,3 +21,11 @@ CREATE TABLE IF NOT EXISTS documents (
 
 INSERT INTO document_types (id, "name") VALUES(1, 'PDF');
 INSERT INTO document_types(id, "name") VALUES(2, 'Image');
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id SERIAL PRIMARY key,
+    api_key VARCHAR NOT NULL UNIQUE,
+    description VARCHAR,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_id bigint NOT NULL REFERENCES users(id);
+);

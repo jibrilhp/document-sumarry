@@ -12,3 +12,11 @@ class User(BaseModel):
 class UserToken(BaseModel):
     username: str
     token: str
+
+class UserAccessTokenRequest(BaseModel):
+    description: str
+
+class UserAccessTokenResponse(BaseModel):
+    api_token: str
+    description: str
+    message: str

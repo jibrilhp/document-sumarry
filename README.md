@@ -46,15 +46,13 @@ The conversation uses iterative refinement to create document summarization. The
 Here is the curl command to call conversation API:
 
 ```bash
-curl --location '<HOST>/v1/conversation' \
---header 'Tenant-Id: internal-audit' \
---form 'project_uuid="14e323af-3895-5435-ade2-f9328e0a890c"' \
---form 'message="<PROMPT>"' \
---form 'conversation_uuid="47f65e64-1ef1-4016-b6ab-dfb0e3231911"' \
---form 'files=<FILE_PATH>' \
---form 'files=<FILE_PATH>' \
---form 'files=files=<FILE_PATH>' \
---form 'is_stream="true"'
+curl --location '<HOST>>/v1/conversation' \
+--header 'Tenant-Id: production-user-1' \
+--header 'Api-Key: <API_KEY>' \
+--header 'Authorization: Bearer <JWT_TOKEN>>"' \
+--form 'message="Kapan masa kepersetaan JPK3 dimulai?"' \
+--form 'conversation_uuid="b0dce2a9-a6fa-4267-9959-b0790fe05ba9"' \
+--form 'is_stream="false"'
 ```
 
 `Tenant-Id` can be any string
@@ -74,3 +72,31 @@ curl --location '<HOST>/v1/projects' \
 `files` supports JPG/PNG and pdf document
 
 `is_stream` is a toggle for response type. If `is_stream` is `true`, backend will response with streamable response. If it `False`, backend will response with a `text/plain` response.
+
+`Api-Key` is a key that can be generated through this API:
+
+```bash
+curl --location 'http://HOST/v1/user/access-token' \
+--header 'accept: application/json' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: <JWT_TOKEN>>' \
+--data '{
+    "description": "demo key"
+}'
+```
+
+The conversation API is rate limited. This app use the API-Key to perform rate limiting. The amount of permitted request is configured on `RATE_LIMIT` environment variable.
+
+## Audit Log
+
+This app logs all user activity but `/login` endpoint. The logs would look something like this:
+
+```
+2025-06-15 19:52:44,392 - INFO - handler.routes - user=johndoe path=/v1/documents method=GET
+```
+
+Especially for conversation API, two additional field is added
+
+```
+2025-06-15 19:54:23,087 - INFO - handler.routes - user=johndoe path=/v1/conversation method=POST request_token=1961, response_token=190
+```

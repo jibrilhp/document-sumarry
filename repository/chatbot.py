@@ -508,15 +508,15 @@ class ChatBotRepository:
         )
         
         # XAI analysis routing
-        chatbot.add_edge("parse_anomaly_reason", "explain_anomaly")
+        chatbot.add_edges("parse_anomaly_reason", "explain_anomaly")
 
 
         # End paths
-        chatbot.add_edge("simulate_sentiment", "add_answer_to_conversation")
-        chatbot.add_edge("generate_chat_response", "add_answer_to_conversation")
-        chatbot.add_edge("analyze_database", "add_answer_to_conversation")
-        chatbot.add_edge("explain_anomaly", "add_answer_to_conversation")
-        chatbot.add_edge("add_answer_to_conversation", END)
+        chatbot.add_edges("simulate_sentiment", "add_answer_to_conversation")
+        chatbot.add_edges("generate_chat_response", "add_answer_to_conversation")
+        chatbot.add_edges("analyze_database", "add_answer_to_conversation")
+        chatbot.add_edges("explain_anomaly", "add_answer_to_conversation")
+        chatbot.add_edges("add_answer_to_conversation", END)
 
         compiled_graph = chatbot.compile_graph(checkpointer=self.checkpointer)
         self.chat_states[thread_id] = compiled_graph

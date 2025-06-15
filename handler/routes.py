@@ -2,14 +2,17 @@ from usecase.document import DocumentUsecase
 from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
 from usecase.user import UserUsecase
-from entity.user import LoginRequest
+from entity.user import LoginRequest, UserAccessTokenRequest, UserAccessTokenResponse
 from entity.document import Document, DocumentDb, DocumentRequest
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge, UnauthorizedAccess
-from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query, Request
+from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query, Request, Depends
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from typing import Annotated, List
 import logging
 import magic
@@ -25,7 +28,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         token = request.headers.get("Authorization")
         if request.url.path.__contains__("/login"):
-            self.__logger.info(f"user={sub} path={request.url.path} method={request.method}")
+            self.__logger.info(f"path={request.url.path} method={request.method} client_ip={request.client.host}")
             return await call_next(request)
         if token is None:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
@@ -36,8 +39,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if sub is None:
                 return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
             
-            self.__logger.info(f"user={sub} path={request.url.path} method={request.method}")
-            return await call_next(request)
+            request.state.user = sub
+            response = await call_next(request)
+            if hasattr(request.state, "req_token") and hasattr(request.state, "res_token"):
+                self.__logger.info(f"user={sub} path={request.url.path} method={request.method} request_token={request.state.req_token}, response_token={request.state.res_token}")
+            else:
+                self.__logger.info(f"user={sub} path={request.url.path} method={request.method}")
+            return response
         except jwt.ExpiredSignatureError:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Token has expired"})
         except jwt.InvalidTokenError:
@@ -62,8 +70,16 @@ class Routes:
         self.user_usecase = user_usecase
         self.logger = logging.getLogger(__name__)
         self.app = app
-        self.setup_router()
+        self.__limiter = Limiter(key_func=self.__get_api_key)
         self.MAX_FILE_SIZE_IN_MB = settings.MAX_FILE_SIZE_IN_MB
+        self.__setting = settings
+        self.setup_router()
+
+    def __get_api_key(self, request: Request) -> str:
+        api_key = request.headers.get("Api-Key")
+        if not api_key:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key is missing")
+        return api_key
 
     def setup_router(self):
         @self.app.get("/v1/documents")
@@ -142,22 +158,23 @@ class Routes:
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
         @self.app.post("/v1/conversation")
+        @self.__limiter.limit(limit_value=self.__setting.RATE_LIMIT)
         async def create_chat_session(
+            request: Request,
             tenant_id: Annotated[str | None, Header()],
             project_uuid: Annotated[str | None, Form()],
             message: Annotated[str | None, Form()],
             conversation_uuid: Annotated[str | None, Form()],
             is_stream: Annotated[bool | None, Form()] = False,
-            files: List[UploadFile] | None = None):
+            files: List[UploadFile] | None = None,
+            api_key: Annotated[str | None, Header()] = None,
+            ):
             try:
-                conversation = Conversation(
-                    project_id=project_uuid,
-                    conversation_uuid=conversation_uuid,
-                    message = message,
-                    tenant_id=tenant_id,
-                    is_stream=is_stream
-                )
-                
+                print(f"api key: {api_key}")
+                if api_key is None:
+                    raise UnauthorizedAccess("API key is required")
+                self.user_usecase.get_api_key(username=request.state.user, api_key=api_key)
+                conversation = Conversation(project_id=project_uuid, conversation_uuid=conversation_uuid, message = message, tenant_id=tenant_id, is_stream=is_stream)
                 if files is not None:
                     __check_file_validity(files)
                     for file in files:
@@ -172,8 +189,16 @@ class Routes:
                 if conversation.is_stream:
                     response_stream = self.conversation_usecase.stream_chat_agent(conversation=conversation)
                     return StreamingResponse(response_stream)  
-                response = self.conversation_usecase.chat_with_agent(conversation=conversation)
+                response, req_token, res_token = self.conversation_usecase.chat_with_agent(conversation=conversation)
+                request.state.req_token = req_token
+                request.state.res_token = res_token
                 return Response(content=response)
+            except UnauthorizedAccess as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "unauthorized access, please provide valid API key")
+            except ResourceNotFound as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
             except FileTooLarge as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(e))
@@ -295,7 +320,19 @@ class Routes:
             except ResourceNotFound as e:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str("username or password is incorrect"))
             except HTTPException as e:
-                raise
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str("internal server error"))
+            
+        @self.app.post("/v1/user/access-token")
+        def user_access_token(request: UserAccessTokenRequest, req: Request) -> UserAccessTokenResponse:
+            try:
+                if request.description == "":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username is empty")
+                response = self.user_usecase.create_api_key(request, req.state.user)
+                return response
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str("internal server error"))
+
 
 
         @self.app.get("/")

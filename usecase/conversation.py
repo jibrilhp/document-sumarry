@@ -39,7 +39,7 @@ class ConversationUsecase:
             output_keys=["answer", "request_token_count", "response_token_count"]
         )
         print(response)
-        return response.get("answer")
+        return response.get("answer"), response.get("request_token_count"), response.get("response_token_count")
 
     
     def stream_chat_agent(self, conversation: Conversation):
