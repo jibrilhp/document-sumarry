@@ -150,258 +150,258 @@ class DatabaseConfig:
         return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
 
 
-class SQLAgentManager:
-    """Manages SQL database connections and agent creation"""
+# class SQLAgentManager:
+#     """Manages SQL database connections and agent creation"""
 
-    def __init__(self, generative_adapter: GenerativeAdapter, db_config: DatabaseConfig):
-        self.generative_adapter = generative_adapter
-        self.db_config = db_config
-        self.db_connection = None
-        self.sql_agent = None
-        self.logger = logging.getLogger(__name__)
-        self.initialization_error = None
+#     def __init__(self, generative_adapter: GenerativeAdapter, db_config: DatabaseConfig):
+#         self.generative_adapter = generative_adapter
+#         self.db_config = db_config
+#         self.db_connection = None
+#         self.sql_agent = None
+#         self.logger = logging.getLogger(__name__)
+#         self.initialization_error = None
 
-    def initialize_sql_agent(self) -> bool:
-        """Initialize the SQL agent with PostgreSQL connection"""
-        self.logger.info("Starting SQL Agent initialization...")
+#     def initialize_sql_agent(self) -> bool:
+#         """Initialize the SQL agent with PostgreSQL connection"""
+#         self.logger.info("Starting SQL Agent initialization...")
 
-        try:
-            # Step 1: Test database connection
-            self.logger.info(f"Connecting to database: {self.db_config.database} at {self.db_config.host}:{self.db_config.port}")
-            connection_string = self.db_config.get_connection_string()
+#         try:
+#             # Step 1: Test database connection
+#             self.logger.info(f"Connecting to database: {self.db_config.database} at {self.db_config.host}:{self.db_config.port}")
+#             connection_string = self.db_config.get_connection_string()
 
-            # Create engine with additional parameters for better connection handling
-            engine = create_engine(
-                connection_string,
-                pool_pre_ping=True,  # Verify connections before use
-                pool_recycle=3600,   # Recycle connections after 1 hour
-                echo=False           # Set to True for SQL debugging
-            )
+#             # Create engine with additional parameters for better connection handling
+#             engine = create_engine(
+#                 connection_string,
+#                 pool_pre_ping=True,  # Verify connections before use
+#                 pool_recycle=3600,   # Recycle connections after 1 hour
+#                 echo=False           # Set to True for SQL debugging
+#             )
 
-            # Test connection
-            with engine.connect() as conn:
-                result = conn.execute(text("SELECT 1 as test"))
-                test_value = result.fetchone()[0]
-                if test_value != 1:
-                    raise Exception("Database connection test failed")
+#             # Test connection
+#             with engine.connect() as conn:
+#                 result = conn.execute(text("SELECT 1 as test"))
+#                 test_value = result.fetchone()[0]
+#                 if test_value != 1:
+#                     raise Exception("Database connection test failed")
 
-            self.logger.info("✓ Database connection successful")
+#             self.logger.info("✓ Database connection successful")
 
-            # Step 2: Create SQLDatabase wrapper
-            self.db_connection = SQLDatabase(engine=engine)
-            tables = self.db_connection.get_table_names()
-            self.logger.info(f"✓ Found {len(tables)} tables: {tables}")
+#             # Step 2: Create SQLDatabase wrapper
+#             self.db_connection = SQLDatabase(engine=engine)
+#             tables = self.db_connection.get_table_names()
+#             self.logger.info(f"✓ Found {len(tables)} tables: {tables}")
 
-            if not tables:
-                self.logger.warning("⚠️  No tables found in database. SQL analysis will be limited.")
+#             if not tables:
+#                 self.logger.warning("⚠️  No tables found in database. SQL analysis will be limited.")
 
-            # Step 3: Rebuild toolkit model
-            try:
-                SQLDatabaseToolkit.model_rebuild()
-                self.logger.info("✓ SQLDatabaseToolkit model rebuilt")
-            except Exception as e:
-                self.logger.warning(f"⚠️  Could not rebuild SQLDatabaseToolkit model: {e}")
+#             # Step 3: Rebuild toolkit model
+#             try:
+#                 SQLDatabaseToolkit.model_rebuild()
+#                 self.logger.info("✓ SQLDatabaseToolkit model rebuilt")
+#             except Exception as e:
+#                 self.logger.warning(f"⚠️  Could not rebuild SQLDatabaseToolkit model: {e}")
 
-            # Step 4: Verify LLM is available
-            if not hasattr(self.generative_adapter, 'chat_model') or self.generative_adapter.chat_model is None:
-                raise Exception("Generative adapter chat_model is not available")
+#             # Step 4: Verify LLM is available
+#             if not hasattr(self.generative_adapter, 'chat_model') or self.generative_adapter.chat_model is None:
+#                 raise Exception("Generative adapter chat_model is not available")
 
-            self.logger.info("✓ LLM model is available")
+#             self.logger.info("✓ LLM model is available")
 
-            # Step 5: Create SQL agent with multiple fallback strategies
-            agent_configs = [
-                # Primary configuration
-                {
-                    "agent_type": "openai-tools",
-                    "verbose": True,
-                    "handle_parsing_errors": True,
-                    "max_iterations": 6,
-                    "max_execution_time": 60
-                },
-                # Fallback 1: Without execution time limit
-                {
-                    "agent_type": "openai-tools",
-                    "verbose": True,
-                    "handle_parsing_errors": True,
-                    "max_iterations": 6
-                },
-                # Fallback 2: Default configuration
-                {
-                    "verbose": True,
-                    "handle_parsing_errors": True
-                },
-                # Fallback 3: Minimal configuration
-                {
-                    "verbose": False
-                }
-            ]
+#             # Step 5: Create SQL agent with multiple fallback strategies
+#             agent_configs = [
+#                 # Primary configuration
+#                 {
+#                     "agent_type": "openai-tools",
+#                     "verbose": True,
+#                     "handle_parsing_errors": True,
+#                     "max_iterations": 6,
+#                     "max_execution_time": 60
+#                 },
+#                 # Fallback 1: Without execution time limit
+#                 {
+#                     "agent_type": "openai-tools",
+#                     "verbose": True,
+#                     "handle_parsing_errors": True,
+#                     "max_iterations": 6
+#                 },
+#                 # Fallback 2: Default configuration
+#                 {
+#                     "verbose": True,
+#                     "handle_parsing_errors": True
+#                 },
+#                 # Fallback 3: Minimal configuration
+#                 {
+#                     "verbose": False
+#                 }
+#             ]
 
-            for i, config in enumerate(agent_configs):
-                try:
-                    self.logger.info(f"Trying SQL agent configuration {i+1}...")
-                    self.sql_agent = create_sql_agent(
-                        llm=self.generative_adapter.chat_model,
-                        db=self.db_connection,
-                        **config
-                    )
+#             for i, config in enumerate(agent_configs):
+#                 try:
+#                     self.logger.info(f"Trying SQL agent configuration {i+1}...")
+#                     self.sql_agent = create_sql_agent(
+#                         llm=self.generative_adapter.chat_model,
+#                         db=self.db_connection,
+#                         **config
+#                     )
 
-                    # Test the agent with a simple query
-                    test_response = self.sql_agent.invoke({"input": "What tables are available in this database?"})
-                    if test_response:
-                        self.logger.info(f"✓ SQL Agent created successfully with configuration {i+1}")
-                        return True
+#                     # Test the agent with a simple query
+#                     test_response = self.sql_agent.invoke({"input": "What tables are available in this database?"})
+#                     if test_response:
+#                         self.logger.info(f"✓ SQL Agent created successfully with configuration {i+1}")
+#                         return True
 
-                except Exception as e:
-                    self.logger.warning(f"Configuration {i+1} failed: {e}")
-                    continue
+#                 except Exception as e:
+#                     self.logger.warning(f"Configuration {i+1} failed: {e}")
+#                     continue
 
-            # If we reach here, all configurations failed
-            raise Exception("All SQL agent configurations failed")
+#             # If we reach here, all configurations failed
+#             raise Exception("All SQL agent configurations failed")
 
-        except Exception as e:
-            error_msg = f"SQL Agent initialization failed: {str(e)}"
-            self.logger.error(error_msg)
-            self.initialization_error = error_msg
-            return False
+#         except Exception as e:
+#             error_msg = f"SQL Agent initialization failed: {str(e)}"
+#             self.logger.error(error_msg)
+#             self.initialization_error = error_msg
+#             return False
 
-    def get_initialization_status(self) -> dict:
-        """Get detailed initialization status for debugging"""
-        return {
-            "sql_agent_initialized": self.sql_agent is not None,
-            "db_connection_initialized": self.db_connection is not None,
-            "initialization_error": self.initialization_error,
-            "database_config": {
-                "host": self.db_config.host,
-                "port": self.db_config.port,
-                "database": self.db_config.database,
-                "username": self.db_config.username
-            },
-            "available_tables": self.db_connection.get_table_names() if self.db_connection else None
-        }
+#     def get_initialization_status(self) -> dict:
+#         """Get detailed initialization status for debugging"""
+#         return {
+#             "sql_agent_initialized": self.sql_agent is not None,
+#             "db_connection_initialized": self.db_connection is not None,
+#             "initialization_error": self.initialization_error,
+#             "database_config": {
+#                 "host": self.db_config.host,
+#                 "port": self.db_config.port,
+#                 "database": self.db_config.database,
+#                 "username": self.db_config.username
+#             },
+#             "available_tables": self.db_connection.get_table_names() if self.db_connection else None
+#         }
 
-    def query_database(self, question: str) -> str:
-        """Execute database query using the SQL agent"""
-        if not self.sql_agent:
-            error_details = self.get_initialization_status()
-            error_msg = f"""
-❌ **SQL Agent Tidak Tersedia**
+#     def query_database(self, question: str) -> str:
+#         """Execute database query using the SQL agent"""
+#         if not self.sql_agent:
+#             error_details = self.get_initialization_status()
+#             error_msg = f"""
+# ❌ **SQL Agent Tidak Tersedia**
 
-**Detail Error:**
-- SQL Agent: {'✓ Initialized' if error_details['sql_agent_initialized'] else '❌ Not Initialized'}
-- Database Connection: {'✓ Connected' if error_details['db_connection_initialized'] else '❌ Not Connected'}
-- Error: {error_details['initialization_error'] or 'Unknown error'}
+# **Detail Error:**
+# - SQL Agent: {'✓ Initialized' if error_details['sql_agent_initialized'] else '❌ Not Initialized'}
+# - Database Connection: {'✓ Connected' if error_details['db_connection_initialized'] else '❌ Not Connected'}
+# - Error: {error_details['initialization_error'] or 'Unknown error'}
 
-**Database Config:**
-- Host: {error_details['database_config']['host']}
-- Port: {error_details['database_config']['port']}
-- Database: {error_details['database_config']['database']}
-- Username: {error_details['database_config']['username']}
+# **Database Config:**
+# - Host: {error_details['database_config']['host']}
+# - Port: {error_details['database_config']['port']}
+# - Database: {error_details['database_config']['database']}
+# - Username: {error_details['database_config']['username']}
 
-**Troubleshooting:**
-1. Pastikan database PostgreSQL berjalan
-2. Periksa kredensial database di environment variables
-3. Pastikan database dan tabel yang dianalisis ada
-4. Periksa koneksi jaringan ke database
+# **Troubleshooting:**
+# 1. Pastikan database PostgreSQL berjalan
+# 2. Periksa kredensial database di environment variables
+# 3. Pastikan database dan tabel yang dianalisis ada
+# 4. Periksa koneksi jaringan ke database
 
-Silakan hubungi administrator untuk mengatasi masalah ini.
-            """
-            return error_msg.strip()
+# Silakan hubungi administrator untuk mengatasi masalah ini.
+#             """
+#             return error_msg.strip()
 
-        try:
-            self.logger.info(f"Executing database query: {question[:100]}...")
+#         try:
+#             self.logger.info(f"Executing database query: {question[:100]}...")
 
-            # Use invoke method for newer LangChain versions
-            response = self.sql_agent.invoke({"input": question})
-            result = response.get("output", str(response))
+#             # Use invoke method for newer LangChain versions
+#             response = self.sql_agent.invoke({"input": question})
+#             result = response.get("output", str(response))
 
-            self.logger.info("Database query executed successfully")
-            return result
+#             self.logger.info("Database query executed successfully")
+#             return result
 
-        except AttributeError:
-            # Fallback to run method
-            try:
-                self.logger.info("Using fallback run method for SQL agent")
-                response = self.sql_agent.run(question)
-                return str(response)
-            except Exception as e:
-                error_msg = f"Error menjalankan query database (fallback): {str(e)}"
-                self.logger.error(error_msg)
-                return error_msg
-        except Exception as e:
-            error_msg = f"Error dalam analisis database: {str(e)}"
-            self.logger.error(error_msg)
-            return error_msg
+#         except AttributeError:
+#             # Fallback to run method
+#             try:
+#                 self.logger.info("Using fallback run method for SQL agent")
+#                 response = self.sql_agent.run(question)
+#                 return str(response)
+#             except Exception as e:
+#                 error_msg = f"Error menjalankan query database (fallback): {str(e)}"
+#                 self.logger.error(error_msg)
+#                 return error_msg
+#         except Exception as e:
+#             error_msg = f"Error dalam analisis database: {str(e)}"
+#             self.logger.error(error_msg)
+#             return error_msg
 
-    def get_database_summary(self) -> str:
-        """Get a summary of available database tables and structure"""
-        if not self.db_connection:
-            return "Database connection tidak tersedia. Silakan periksa konfigurasi database."
+#     def get_database_summary(self) -> str:
+#         """Get a summary of available database tables and structure"""
+#         if not self.db_connection:
+#             return "Database connection tidak tersedia. Silakan periksa konfigurasi database."
 
-        try:
-            tables = self.db_connection.get_table_names()
-            if not tables:
-                return f"Database '{self.db_config.database}' terhubung, tetapi tidak ada tabel yang ditemukan."
+#         try:
+#             tables = self.db_connection.get_table_names()
+#             if not tables:
+#                 return f"Database '{self.db_config.database}' terhubung, tetapi tidak ada tabel yang ditemukan."
 
-            summary = f"📊 **Database: {self.db_config.database}**\n"
-            summary += f"🔗 Host: {self.db_config.host}:{self.db_config.port}\n"
-            summary += f"📋 Jumlah tabel: {len(tables)}\n\n"
+#             summary = f"📊 **Database: {self.db_config.database}**\n"
+#             summary += f"🔗 Host: {self.db_config.host}:{self.db_config.port}\n"
+#             summary += f"📋 Jumlah tabel: {len(tables)}\n\n"
 
-            summary += "**Daftar Tabel dan Struktur:**\n"
+#             summary += "**Daftar Tabel dan Struktur:**\n"
 
-            for i, table in enumerate(tables, 1):
-                try:
-                    # Get table info with sample data count
-                    table_info = self.db_connection.get_table_info([table])
+#             for i, table in enumerate(tables, 1):
+#                 try:
+#                     # Get table info with sample data count
+#                     table_info = self.db_connection.get_table_info([table])
 
-                    # Try to get row count
-                    try:
-                        with self.db_connection._engine.connect() as conn:
-                            count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
-                            row_count = count_result[0] if count_result else "Unknown"
-                    except:
-                        row_count = "Unknown"
+#                     # Try to get row count
+#                     try:
+#                         with self.db_connection._engine.connect() as conn:
+#                             count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+#                             row_count = count_result[0] if count_result else "Unknown"
+#                     except:
+#                         row_count = "Unknown"
 
-                    summary += f"\n**{i}. {table.upper()}** ({row_count} baris)\n"
+#                     summary += f"\n**{i}. {table.upper()}** ({row_count} baris)\n"
 
-                    # Parse table info to show columns more cleanly
-                    if "CREATE TABLE" in table_info:
-                        # Extract column information
-                        lines = table_info.split('\n')
-                        columns = []
-                        for line in lines:
-                            if line.strip() and not line.strip().startswith('CREATE') and not line.strip().startswith(')'):
-                                clean_line = line.strip().rstrip(',')
-                                if clean_line and not clean_line.startswith('('):
-                                    columns.append(f"   • {clean_line}")
+#                     # Parse table info to show columns more cleanly
+#                     if "CREATE TABLE" in table_info:
+#                         # Extract column information
+#                         lines = table_info.split('\n')
+#                         columns = []
+#                         for line in lines:
+#                             if line.strip() and not line.strip().startswith('CREATE') and not line.strip().startswith(')'):
+#                                 clean_line = line.strip().rstrip(',')
+#                                 if clean_line and not clean_line.startswith('('):
+#                                     columns.append(f"   • {clean_line}")
 
-                        if columns:
-                            summary += "   **Kolom:**\n"
-                            summary += '\n'.join(columns[:5])  # Show first 5 columns
-                            if len(columns) > 5:
-                                summary += f"\n   • ... dan {len(columns) - 5} kolom lainnya"
-                    else:
-                        # Fallback: show raw table info (truncated)
-                        info_lines = table_info.split('\n')[:5]
-                        for line in info_lines:
-                            if line.strip():
-                                summary += f"   {line.strip()}\n"
+#                         if columns:
+#                             summary += "   **Kolom:**\n"
+#                             summary += '\n'.join(columns[:5])  # Show first 5 columns
+#                             if len(columns) > 5:
+#                                 summary += f"\n   • ... dan {len(columns) - 5} kolom lainnya"
+#                     else:
+#                         # Fallback: show raw table info (truncated)
+#                         info_lines = table_info.split('\n')[:5]
+#                         for line in info_lines:
+#                             if line.strip():
+#                                 summary += f"   {line.strip()}\n"
 
-                    summary += "\n"
+#                     summary += "\n"
 
-                except Exception as e:
-                    summary += f"   ⚠️ Error getting table info: {str(e)}\n\n"
+#                 except Exception as e:
+#                     summary += f"   ⚠️ Error getting table info: {str(e)}\n\n"
 
-            summary += "\n💡 **Tips:**\n"
-            summary += "• Tanyakan 'berapa baris di tabel [nama_tabel]' untuk mengetahui jumlah data\n"
-            summary += "• Tanyakan 'tampilkan 5 data pertama dari [nama_tabel]' untuk melihat sample data\n"
-            summary += "• Tanyakan 'struktur tabel [nama_tabel]' untuk detail kolom\n"
+#             summary += "\n💡 **Tips:**\n"
+#             summary += "• Tanyakan 'berapa baris di tabel [nama_tabel]' untuk mengetahui jumlah data\n"
+#             summary += "• Tanyakan 'tampilkan 5 data pertama dari [nama_tabel]' untuk melihat sample data\n"
+#             summary += "• Tanyakan 'struktur tabel [nama_tabel]' untuk detail kolom\n"
 
-            return summary
+#             return summary
 
-        except Exception as e:
-            error_msg = f"Error mendapatkan informasi database: {str(e)}"
-            self.logger.error(error_msg)
-            return error_msg
+#         except Exception as e:
+#             error_msg = f"Error mendapatkan informasi database: {str(e)}"
+#             self.logger.error(error_msg)
+#             return error_msg
 
 
 class ChatBotRepository:
@@ -418,27 +418,27 @@ class ChatBotRepository:
         self.logger = logging.getLogger(__name__)
 
         # Initialize SQL Agent Manager
-        if db_config is None:
+        # if db_config is None:
             # Use environment variables or defaults
-            db_config = DatabaseConfig(
-                host=os.getenv("ANALYST_DB_HOST", "localhost"),
-                port=int(os.getenv("ANALYST_DB_PORT", "5432")),
-                database=os.getenv("ANALYST_DB_NAME", "your_database"),
-                username=os.getenv("ANALYST_DB_USER", "postgres"),
-                password=os.getenv("ANALYST_DB_PASSWORD", "password")
-            )
+            # db_config = DatabaseConfig(
+            #     host=os.getenv("ANALYST_DB_HOST", "localhost"),
+            #     port=int(os.getenv("ANALYST_DB_PORT", "5432")),
+            #     database=os.getenv("ANALYST_DB_NAME", "your_database"),
+            #     username=os.getenv("ANALYST_DB_USER", "postgres"),
+            #     password=os.getenv("ANALYST_DB_PASSWORD", "password")
+            # )
 
-        self.sql_manager = SQLAgentManager(generative_provider, db_config)
+        # self.sql_manager = SQLAgentManager(generative_provider, db_config)
 
         # Initialize SQL agent on startup
-        self.sql_initialization_success = self.sql_manager.initialize_sql_agent()
-        if not self.sql_initialization_success:
-            self.logger.warning("SQL Agent initialization failed. Database analysis features will be unavailable.")
+        # self.sql_initialization_success = self.sql_manager.initialize_sql_agent()
+        # if not self.sql_initialization_success:
+            # self.logger.warning("SQL Agent initialization failed. Database analysis features will be unavailable.")
             # Log detailed error information
-            status = self.sql_manager.get_initialization_status()
-            self.logger.error(f"SQL Agent Status: {status}")
-        else:
-            self.logger.info("SQL Agent initialized successfully")
+            # status = self.sql_manager.get_initialization_status()
+            # self.logger.error(f"SQL Agent Status: {status}")
+        # else:
+            # self.logger.info("SQL Agent initialized successfully")
 
     def get_sql_status(self) -> dict:
         """Get SQL agent status for debugging"""
@@ -508,15 +508,15 @@ class ChatBotRepository:
         )
         
         # XAI analysis routing
-        chatbot.add_edge("parse_anomaly_reason", "explain_anomaly")
+        chatbot.add_edges("parse_anomaly_reason", "explain_anomaly")
 
 
         # End paths
-        chatbot.add_edge("simulate_sentiment", "add_answer_to_conversation")
-        chatbot.add_edge("generate_chat_response", "add_answer_to_conversation")
-        chatbot.add_edge("analyze_database", "add_answer_to_conversation")
-        chatbot.add_edge("explain_anomaly", "add_answer_to_conversation")
-        chatbot.add_edge("add_answer_to_conversation", END)
+        chatbot.add_edges("simulate_sentiment", "add_answer_to_conversation")
+        chatbot.add_edges("generate_chat_response", "add_answer_to_conversation")
+        chatbot.add_edges("analyze_database", "add_answer_to_conversation")
+        chatbot.add_edges("explain_anomaly", "add_answer_to_conversation")
+        chatbot.add_edges("add_answer_to_conversation", END)
 
         compiled_graph = chatbot.compile_graph(checkpointer=self.checkpointer)
         self.chat_states[thread_id] = compiled_graph

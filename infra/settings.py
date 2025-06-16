@@ -13,5 +13,8 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str
     OLLAMA_BASE_URL: str
     MAX_FILE_SIZE_IN_MB: int
+    SECRET_KEY: str
+    JWT_ALGORITHM: str
+    RATE_LIMIT: str
 
     model_config = SettingsConfigDict(env_file=".env")
