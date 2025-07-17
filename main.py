@@ -26,7 +26,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8088",
-        "http://103.56.148.150:8088/"  # Alternative localhost
+        "http://103.56.148.150:8088/",
+        "http://103.56.148.150:8083/",
+        "https://103.56.148.150:8088/"
+        "https://license.dtskul-ai.ghanemtech.co.id/gpt"     # Alternative localhost
         # Add other allowed origins as needed
     ],
     allow_credentials=True,
