@@ -29,3 +29,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     user_id bigint NOT NULL REFERENCES users(id);
 );
+
+-- 26072025: `documents` table no longer needs to assure consistency with `projects` table as it already validated on downstream application
+ALTER TABLE public.documents DROP CONSTRAINT documents_projects_uuid_fkey;

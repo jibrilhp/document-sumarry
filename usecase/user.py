@@ -56,6 +56,10 @@ class UserUsecase:
     def get_api_key(self, username: str, api_key: str) -> str:
         api_key = self.__user_repository.get_api_key(username=username, api_key=api_key)
         return api_key
+    
+    def get_api_key_internal(self,  api_key: str) -> str:
+        api_key = self.__user_repository.get_api_key_internal(api_key=api_key)
+        return api_key
         
         
 
