@@ -24,6 +24,8 @@ class Document:
             return FileType.IMAGE_DOCUMENT.value
         if file_name.endswith(".csv"):
             return FileType.CSV_DOCUMENT.value
+        if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
+            return FileType.EXCEL_DOCUMENT.value
         raise UnknownFileType(message="invalid file type", file_type=file_name)
     
     def set_multinancy_attr(self, project_uuid: str, tenant_id: str):

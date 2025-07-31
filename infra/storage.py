@@ -91,3 +91,43 @@ class StorageRepository:
             documents.append(doc)
             
         return documents
+    
+    def load_xlsx_document_with_langchain(self, document: DocumentDb) -> List[LangchainDocument]:
+        """
+        Loads an XLSX file, processes its content, and returns a list of LangchainDocument objects.
+
+        Each row in the XLSX is treated as a separate document.
+
+        Args:
+            document: A DocumentDb object containing metadata and the path to the XLSX file.
+
+        Returns:
+            A list of LangchainDocument objects, where each object represents a row from the XLSX.
+        """
+        file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
+        logging.info(f"Loading XLSX from {file_path}")
+        
+        try:
+            df = pd.read_excel(file_path)
+        except FileNotFoundError:
+            logging.error(f"XLSX file not found at {file_path}")
+            return []
+        except Exception as e:
+            logging.error(f"Failed to read XLSX file at {file_path}: {e}")
+            return []
+
+        documents: List[LangchainDocument] = []
+        for index, row in df.iterrows():
+            # Convert each row to a string format. You can customize this part.
+            row_content = ', '.join(f'{col}: {val}' for col, val in row.astype(str).to_dict().items())
+            
+            metadata = {
+                "tenant_id": document.tenant_id,
+                "project_uuid": document.project_uuid,
+                "row_number": index + 1 
+            }
+            
+            doc = LangchainDocument(page_content=row_content, metadata=metadata)
+            documents.append(doc)
+            
+        return documents
