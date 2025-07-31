@@ -1,15 +1,13 @@
 from typing import Annotated, List
-from langchain_core.messages import BaseMessage
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langchain_core.runnables.base import RunnableLike
-from langgraph.graph.graph import CompiledGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langchain_core.documents import Document
-from PIL import Image as PILImage
-import io
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from langchain_core.messages import BaseMessage
 
 class Conversation(BaseModel):
     project_id: str | None = ""
@@ -37,7 +35,7 @@ class ConversationState(BaseModel):
 
 class ConversationalChatbot:
     def __init__(self):
-        self._graph_builder = StateGraph(State)
+        self._graph_builder = StateGraph(StateV2)
 
     def add_node(self, node_name: str, node: RunnableLike):
         self._graph_builder.add_node(node_name, node)
@@ -48,6 +46,20 @@ class ConversationalChatbot:
     def add_edges(self, start_key, end_key):
         self._graph_builder.add_edge(start_key, end_key)
 
-    def compile_graph(self, checkpointer: BaseCheckpointSaver) -> CompiledGraph:
+    def compile_graph(self, checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
         app = self._graph_builder.compile(checkpointer=checkpointer)
         return app
+    
+    
+class AgentResponseV2(BaseModel):
+    """Response for user's question"""
+    answer: str = Field(description="The answer of the user's question")
+    references: List[str] = Field(description="list of resource's url")
+    needs_clarification: bool = Field(description="Whether system needed clarification from user or not")
+    
+class StateV2(TypedDict):
+    messages: Annotated[List[BaseMessage], add_messages]
+    router_output: str
+    question: str
+    agent_answer: AgentResponseV2
+

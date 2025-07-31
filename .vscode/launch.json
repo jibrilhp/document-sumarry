@@ -7,12 +7,14 @@
       "request": "launch",
       "program": "${workspaceFolder}/.venv/bin/fastapi",
       "args": [
-        "dev",
+        "run",
         "main.py"
       ],
       "env": {
-        "GOOGLE_API_KEY": ""
-      }
+        "GOOGLE_API_KEY": "",
+        "TAVILY_API_KEY":""
+      },
+      "justMyCode": false
     }
   ]
 }
