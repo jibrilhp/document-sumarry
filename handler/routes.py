@@ -27,7 +27,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         token = request.headers.get("Authorization")
-        if request.url.path.__contains__("/login"):
+        if request.url.path.__contains__("/login") or request.url.path.__contains__("/internal"):
             self.__logger.info(f"path={request.url.path} method={request.method} client_ip={request.client.host}")
             return await call_next(request)
         if token is None:
@@ -170,7 +170,6 @@ class Routes:
             api_key: Annotated[str | None, Header()] = None,
             ):
             try:
-                print(f"api key: {api_key}")
                 if api_key is None:
                     raise UnauthorizedAccess("API key is required")
                 self.user_usecase.get_api_key(username=request.state.user, api_key=api_key)
@@ -332,7 +331,59 @@ class Routes:
             except Exception as e:
                 self.logger.error(str(e))
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str("internal server error"))
+            
+        @self.app.post("/v1/internal/conversation")
+        async def create_internal_chat_session(
+            request: Request,
+            api_key: Annotated[str,  Header()],
+            project_id: Annotated[str,  Form()],
+            conversation_uuid: Annotated[str, Form()],
+            message: Annotated[str, Form()],
+            username: Annotated[str | None, Header()] = None,
+            files: List[UploadFile] | None = None,
+        ):
+            try:
+                if username is None:
+                    username = ""
+                    self.user_usecase.get_api_key_internal(api_key=api_key)
+                else:
+                    self.user_usecase.get_api_key(username=username, api_key=api_key)
+                conversation = Conversation(
+                    project_id=project_id,
+                    conversation_uuid=conversation_uuid,
+                    message=message,
+                    tenant_id=username,
+                )
+                if files is not None:
+                    __check_file_validity(files)
+                    for file in files:
+                        document = Document(file=file)
+                        document.set_multinancy_attr(project_uuid=project_id, tenant_id=username)
+                        document_db = self.document_usecase.store_document(document=document)
+                        langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                        conversation.document_from_user.extend(langchain_document)
 
+                conversation.project_id = project_id
+                conversation.tenant_id = username
+                response, req_token, res_token = self.conversation_usecase.chat_with_agent(conversation=conversation)
+                request.state.req_token = req_token
+                request.state.res_token = res_token
+                return Response(content=response)
+            except UnauthorizedAccess as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "unauthorized access, please provide valid API key")
+            except ResourceNotFound as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+            except FileTooLarge as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(e))
+            except UnknownFileType as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
 
         @self.app.get("/")

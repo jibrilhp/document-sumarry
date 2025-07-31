@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: FastAPI Dev",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/.venv/bin/fastapi",
+      "args": [
+        "dev",
+        "main.py"
+      ],
+      "env": {
+        "GOOGLE_API_KEY": ""
+      }
+    }
+  ]
+}
