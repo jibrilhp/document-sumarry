@@ -26,7 +26,7 @@ class StorageRepository:
         logging.info(f"load pdf from {file_path}")
         reader = PdfReader(file_path)
         extracted_text: str = ""
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500_000, chunk_overlap=10_000)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=50_000, chunk_overlap=1_000)
         metadatas: List[dict] = list()
         for page in reader.pages:
             extracted_text += self.clean_text(page.extract_text())

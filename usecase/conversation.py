@@ -6,6 +6,7 @@ from entity.document import Chat
 from repository.chatbot import ChatBotRepository
 from infra.generative_provider import GenerativeAdapter
 from repository.document import DocumentRepository
+from langchain_core.runnables import RunnableConfig
 
 class ConversationUsecase:
     def __init__(self, ollama_adapter: GenerativeAdapter, chatbot_repository: ChatBotRepository, document_repository: DocumentRepository):
@@ -24,8 +25,15 @@ class ConversationUsecase:
         return chatbot
 
     def chat_with_agent(self, conversation: Conversation):
+        if conversation.document_from_user is None:
+            conversation.document_from_user = list()
         chatbot = self.__retrieve_chatbot(conversation=conversation)
-        config = {"configurable": {"thread_id": conversation.conversation_uuid}}
+        config: RunnableConfig = {
+            "recursion_limit": max(25, conversation.document_from_user.__len__() * 2),
+            "configurable": {
+                "thread_id": conversation.conversation_uuid
+            }
+        }
         response = chatbot.invoke(
             input={"conversation": [{
                 "role": "user", "content": conversation.message,
