@@ -1,5 +1,6 @@
 from typing import Dict, Literal, List
 from entity.conversation import ConversationalChatbot
+from entity.tools import VectorSearchInput, VectorSearchOutput
 from infra.generative_provider import GenerativeAdapter
 from infra.data_store import PostgresAdapter
 import logging
@@ -17,6 +18,7 @@ from langchain_core.tools.base import BaseTool
 from langchain_tavily import TavilySearch, TavilyExtract
 from langchain_core.messages import AIMessage
 from langchain_core.documents import Document
+from langchain_core.tools import tool
 
 class ChatBotV2Repository:
     def __init__(
@@ -40,8 +42,6 @@ class ChatBotV2Repository:
        
         chatbot.add_node("initial_summary", self.__generate_initial_summary)
         chatbot.add_node("summary_refinement", self.__generate_summary_refinement)
-        chatbot.add_node("fetch_context", self.__fetch_context)
-        chatbot.add_node("generate_chat_response", self.__generate_chat_response)
 
         chatbot.add_conditional_edges("llm_router", self.__llm_router)
         chatbot.add_conditional_edges("initial_summary", self.__should_refine)
@@ -49,7 +49,6 @@ class ChatBotV2Repository:
 
         chatbot.add_edges("general_assistance", END)
         chatbot.add_edges("specific_assistance", END)
-        chatbot.add_edges("generate_chat_response", END)
 
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
         g = compiled_graph.get_graph().draw_mermaid_png()
@@ -67,6 +66,26 @@ class ChatBotV2Repository:
     
     def __tavily_extract_tool(self) -> BaseTool:
         return TavilyExtract()
+
+    def get_vector_search_tool(self) -> BaseTool:
+        @tool(
+            name_or_callable="vector_search",
+            args_schema=VectorSearchInput,
+            description="Search for relevant documents in the vector database using semantic similarity."
+        )
+        def _vector_search(query: str, k: int = 3, score_threshold: float = 0.6) -> VectorSearchOutput:
+            related_docs = self.__pgvector.similarity_search_with_relevance_scores(
+                query=query, k=k, score_threshold=score_threshold
+            )
+            output = VectorSearchOutput(sources=set(), query=query, documents=[], scores=[], total_results=0)
+            for doc, score in related_docs:
+                output.documents.append(doc.page_content)
+                output.scores.append(score)
+                output.total_results += 1
+                output.sources.add(doc.metadata.get("document_name", "unknown"))
+            return output
+
+        return _vector_search
 
 
     def __create_workflow_routing_prompt(self) -> RunnableSerializable:
@@ -152,21 +171,21 @@ class ChatBotV2Repository:
             debug=True,            
             response_format=AgentResponseV2,
             model=self.__generative_adapter.chat_model, 
-            tools=[self.__tavily_search_tools(), self.__tavily_extract_tool()],
+            tools=[self.get_vector_search_tool(), self.__tavily_search_tools(), self.__tavily_extract_tool()],
             prompt="""
-             You are a friendly and knowledgeable assistant designed to help everyday users with clear, accurate, and engaging answers. Your mission is to answer questions in a way that's easy to understand, using a step-by-step process to ensure the best response. Here's how you work:
+                Kamu adalah asisten riset yang dapat menggabungkan informasi dari sumber internal (vector_search) dan eksternal (tavily_search, tavily_extract).
 
-             1. **Get the Question**: Carefully read the user's question to understand what they're asking and why. Check the conversation history to see if past chats give extra context.
-             2. **Gather Information**: If the question needs up-to-date info or details you don't have, use the web search tool to find relevant data. Summarize what you find to keep it focused and useful.
-             3. **Make a Plan**: Combine your built-in knowledge, past conversation context, and any web search results to decide how to answer. Plan steps like answering directly, summarizing web info, or asking for clarification if the question isn't clear.
-             4. **Deliver the Answer**: Follow your plan to create a response that's concise, friendly, and helpful
-
-             **How to Behave**:
-             - Keep answers simple, warm, and easy to follow, like chatting with a friend.
-             - Only use the web search tool when you need fresh or specific info—don't overdo it.
-             - If the question is vague, politely ask for more details to nail the response.
-             - For tricky or sensitive topics, stay neutral and kind.
-             - If you're unsure or can't find enough info, say so honestly and point users to reliable sources (e.g., “For more details, check trusted websites or official sources”).        
+                Aturan kerja:
+                1. SELALU mulai dengan vector_search menggunakan pertanyaan pengguna.
+                2. Evaluasi apakah hasil vector_search cukup untuk menjawab pertanyaan dengan yakin:
+                - Cukup = mengandung fakta atau data relevan yang langsung menjawab pertanyaan.
+                - Kurang = informasi tidak ada, tidak spesifik, atau tidak lengkap.
+                3. Jika kurang, gunakan tavily_search untuk mencari informasi tambahan di web.
+                4. Jika dari tavily_search terdapat URL yang relevan namun perlu isi lebih detail, gunakan tavily_extract.
+                5. Gabungkan semua informasi yang ditemukan menjadi satu jawaban terpadu.
+                6. Hilangkan duplikasi sumber dari semua alat, lalu masukkan ke dalam "references".
+                7. Jika setelah semua langkah jawaban masih belum lengkap atau ambigu, set `needs_clarification=true` dan jelaskan kekurangannya.
+                8. Jika yakin, set `needs_clarification=false`.
             """
         )
         return react_agent
