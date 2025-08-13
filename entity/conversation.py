@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated, List, Set
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -54,7 +54,7 @@ class ConversationalChatbot:
 class AgentResponseV2(BaseModel):
     """Response for user's question"""
     answer: str = Field(description="The answer of the user's question")
-    references: List[str] = Field(description="list of resource's url")
+    references: Set[str] = Field(description="list of resource's url")
     needs_clarification: bool = Field(description="Whether system needed clarification from user or not")
     
 class StateV2(TypedDict):
@@ -62,4 +62,7 @@ class StateV2(TypedDict):
     router_output: str
     question: str
     agent_answer: AgentResponseV2
+    document_from_user: List[Document]
+    document_idx: int
+    context: List[Document]
 

@@ -393,6 +393,7 @@ class Routes:
             conversation_uuid: Annotated[str, Form()],
             message: Annotated[str, Form()],
             username: Annotated[str | None, Header()] = None,
+            files: List[UploadFile] | None = None,
         ):
                 if username is None:
                     username = ""
@@ -405,6 +406,15 @@ class Routes:
                     message=message,
                     tenant_id=username,
                 )
+                if files is not None:
+                    __check_file_validity(files)
+                    for file in files:
+                        document = Document(file=file)
+                        document.set_multinancy_attr(project_uuid=project_id, tenant_id=username)
+                        document_db = self.document_usecase.store_document(document=document)
+                        langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                        conversation.document_from_user.extend(langchain_document)
+                
                 conversation.project_id = project_id
                 conversation.tenant_id = username
                 response = self.conversation_usecase.chat_with_agentv2(conversation=conversation)

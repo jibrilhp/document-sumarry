@@ -3,7 +3,7 @@ import re
 import logging
 import os
 
-from entity.conversation import ConversationalChatbot, StateV2, ConversationState
+from entity.conversation import ConversationalChatbot, State, ConversationState
 from infra.data_store import PostgresAdapter
 from infra.generative_provider import GenerativeAdapter
 from langchain_core.prompts import ChatPromptTemplate
@@ -625,14 +625,14 @@ class ChatBotRepository:
         )
 
     # Existing node methods (unchanged)
-    def __generate_initial_summary(self, state: StateV2, config: RunnableConfig) -> StateV2:
+    def __generate_initial_summary(self, state: State, config: RunnableConfig) -> State:
         summary = self.__create_initial_summary_chain().invoke(
             input=state["document_from_user"][0],
             config=config,
         )
         return {"answer": summary, "index": 1}
 
-    def __generate_summary_refinement(self, state: StateV2, config: RunnableConfig) -> StateV2:
+    def __generate_summary_refinement(self, state: State, config: RunnableConfig) -> State:
         refined = self.__create_summary_refinement_chain().invoke(
             {
                 "existing_answer": state["answer"],
@@ -642,7 +642,7 @@ class ChatBotRepository:
         )
         return {"answer": refined, "index": state["index"] + 1}
 
-    def __fetch_context(self, state: StateV2) -> StateV2:
+    def __fetch_context(self, state: State) -> State:
         """Retrieve vector‑similar docs to the user question."""
         q_text = state["conversation"][-1].content
         vec_docs = self.pgvector.similarity_search_with_relevance_scores(
@@ -651,7 +651,7 @@ class ChatBotRepository:
         context = "\n".join(doc.page_content for doc, _ in vec_docs)
         return {"context": context}
 
-    def __simulate_sentiment(self, state: StateV2) -> StateV2:
+    def __simulate_sentiment(self, state: State) -> State:
         prompt = ChatPromptTemplate(
             [
                 (
@@ -674,7 +674,7 @@ class ChatBotRepository:
         answer = chain.invoke({"question": state["conversation"][-1].content})
         return {"answer": answer}
 
-    def __generate_chat_response(self, state: StateV2) -> StateV2:
+    def __generate_chat_response(self, state: State) -> State:
         chain = self.__create_answer_chain()
         answer = chain.invoke(
             {
@@ -686,7 +686,7 @@ class ChatBotRepository:
         return {"answer": answer}
 
     # SQL analysis node methods
-    def __get_database_summary(self, state: StateV2) -> StateV2:
+    def __get_database_summary(self, state: State) -> State:
         """Get database summary and structure information"""
         question = state["conversation"][-1].content
 
@@ -702,7 +702,7 @@ class ChatBotRepository:
 
         return {"db_summary": summary}
 
-    def __analyze_database(self, state: StateV2) -> StateV2:
+    def __analyze_database(self, state: State) -> State:
         """Perform database analysis using SQL agent"""
         question = state["conversation"][-1].content
 
@@ -727,7 +727,7 @@ class ChatBotRepository:
         return {"answer": answer}
         
     # XAI Anomaly Explanation Node Methods
-    def __parse_anomaly_reason(self, state: StateV2) -> StateV2:
+    def __parse_anomaly_reason(self, state: State) -> State:
         """
         Parses the complex anomaly_reason string into a structured dictionary.
         This node should be preceded by a step that loads the anomaly data into the state.
@@ -763,7 +763,7 @@ class ChatBotRepository:
 
         return {"parsed_anomaly": parsed_reasons}
 
-    def __explain_anomaly(self, state: StateV2) -> StateV2:
+    def __explain_anomaly(self, state: State) -> State:
         """
         Generates a user-friendly explanation of the anomaly using its context.
         """
@@ -821,15 +821,15 @@ class ChatBotRepository:
         return {"answer": explanation}
 
 
-    def __add_answer_to_conversation(self, state: StateV2) -> StateV2:
+    def __add_answer_to_conversation(self, state: State) -> State:
         return {"conversation": [state["answer"]]}
 
     # Enhanced conditional edge methods
-    def __should_summarize(self, state: StateV2) -> Literal["fetch_context", "generate_initial_summary"]:
+    def __should_summarize(self, state: State) -> Literal["fetch_context", "generate_initial_summary"]:
         has_docs = len(state.get("document_from_user", [])) > 0
         return "generate_initial_summary" if has_docs else "fetch_context"
 
-    def __should_refine(self, state: StateV2) -> Literal["refine_summary", "add_answer_to_conversation"]:
+    def __should_refine(self, state: State) -> Literal["refine_summary", "add_answer_to_conversation"]:
         return (
             "add_answer_to_conversation"
             if state["index"] >= len(state["document_from_user"])
@@ -837,7 +837,7 @@ class ChatBotRepository:
         )
 
     def __route_after_context(
-        self, state: StateV2
+        self, state: State
     ) -> Literal["simulate_sentiment", "generate_chat_response", "get_database_summary", "parse_anomaly_reason"]:
         question = state["conversation"][-1].content
 
@@ -851,7 +851,7 @@ class ChatBotRepository:
             return "generate_chat_response"
 
     def __route_after_db_summary(
-        self, state: StateV2
+        self, state: State
     ) -> Literal["analyze_database"]:
         """Always proceed to database analysis after getting summary"""
         return "analyze_database"

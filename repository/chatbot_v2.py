@@ -8,15 +8,15 @@ from langgraph.graph.state import CompiledStateGraph
 from langchain_core.prompts import ChatPromptTemplate
 from entity.conversation import StateV2, AgentResponseV2
 from langchain_core.runnables import RunnableConfig
-from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.base import RunnableSerializable
 from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt.chat_agent_executor import AgentState
 from langchain_core.runnables import Runnable
 from langchain_core.tools.base import BaseTool
 from langchain_tavily import TavilySearch, TavilyExtract
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage
+from langchain_core.documents import Document
 
 class ChatBotV2Repository:
     def __init__(
@@ -29,7 +29,35 @@ class ChatBotV2Repository:
         self.__checkpointer = postgres_adapter.get_checkpointer()
         self.__logger = logging.getLogger(__name__)
         self.__chat_states: Dict[str, CompiledStateGraph] = {}
-        self.__agent_response_parser = PydanticOutputParser(pydantic_object=AgentResponseV2)
+
+    def create_chatbot_v2(self, thread_id: str):
+        chatbot = ConversationalChatbot()
+        chatbot.add_conditional_edges(START, self.__should_summarize)
+
+        chatbot.add_node("llm_router", self.__create_workflow_routing_chain)
+        chatbot.add_node("general_assistance", self.__general_knowledge_agent_chain)
+        chatbot.add_node("specific_assistance", self.__specific_knowledge_agent_chain)
+       
+        chatbot.add_node("initial_summary", self.__generate_initial_summary)
+        chatbot.add_node("summary_refinement", self.__generate_summary_refinement)
+        chatbot.add_node("fetch_context", self.__fetch_context)
+        chatbot.add_node("generate_chat_response", self.__generate_chat_response)
+
+        chatbot.add_conditional_edges("llm_router", self.__llm_router)
+        chatbot.add_conditional_edges("initial_summary", self.__should_refine)
+        chatbot.add_conditional_edges("summary_refinement", self.__should_refine)
+
+        chatbot.add_edges("general_assistance", END)
+        chatbot.add_edges("specific_assistance", END)
+        chatbot.add_edges("generate_chat_response", END)
+
+        compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
+        g = compiled_graph.get_graph().draw_mermaid_png()
+        with open("chatbot_v2.png", "w+b") as f:
+            f.write(g)
+        self.__chat_states[thread_id] = compiled_graph
+        return compiled_graph
+    
 
     def __tavily_search_tools(self) -> BaseTool:
         tool = TavilySearch(
@@ -108,7 +136,7 @@ class ChatBotV2Repository:
     
     def __general_knowledge_agent_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
         try:
-            agent = self.__specific_knowledge_agent()
+            agent = self.__general_knowledge_agent()
             response = agent.invoke({"messages": [state.get("question")]}, config=config)
             output: AgentResponseV2 = response.get("structured_response")
             return {"agent_answer": output}
@@ -152,26 +180,6 @@ class ChatBotV2Repository:
         except Exception as e:
             print(e)
             raise
-            
-        return state
-    
-
-
-    def create_chatbot_v2(self, thread_id: str):
-        chatbot = ConversationalChatbot()
-        chatbot.add_edges(START, "llm_router")
-        chatbot.add_node("llm_router", self.__create_workflow_routing_chain)
-        chatbot.add_node("general_assistance", self.__general_knowledge_agent_chain)
-        chatbot.add_node("specific_assistance", self.__specific_knowledge_agent_chain)
-        chatbot.add_conditional_edges("llm_router", self.__llm_router)
-        chatbot.add_edges("general_assistance", END)
-        chatbot.add_edges("specific_assistance", END)
-        compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
-        g = compiled_graph.get_graph().draw_mermaid_png()
-        with open("chatbot_v2.png", "w+b") as f:
-            f.write(g)
-        self.__chat_states[thread_id] = compiled_graph
-        return compiled_graph
     
     def get_chatbot_v2(self, thread_id: str) -> CompiledStateGraph | None:
         try:
@@ -180,4 +188,120 @@ class ChatBotV2Repository:
         except Exception:
             raise
 
+    def __should_summarize(self, state: StateV2) -> Literal["llm_router", "initial_summary"]:
+        has_docs = len(state.get("document_from_user", [])) > 0
+        return "initial_summary" if has_docs else "llm_router"
 
+    def __should_refine(self, state: StateV2) -> Literal["summary_refinement", END]:
+        return "summary_refinement" if state.get("document_idx") < len(state.get("document_from_user")) else END
+
+    def __create_initial_summary_chain(self):
+        prompt = ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """\
+                    Buatkan ringkasan terstruktur dari konteks berikut.
+
+                    ### Perintah ringkasan
+                    1. Maksimum 120 kata, bahasa sama dengan dokumen.
+                    2. Gunakan poin‑poin (•) untuk fakta kunci.
+                    3. Tutup dengan "👉 Ringkasan selesai".
+
+                    {context}""",
+                )
+            ]
+        )
+        return prompt | self.__generative_adapter.chat_model.with_structured_output(AgentResponseV2)
+    
+    def __generate_initial_summary(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        answer = self.__create_initial_summary_chain().invoke(
+            input=state["document_from_user"][0],
+            config=config,
+        )
+        answer.references.add(state["document_from_user"][0].metadata["document_name"])
+        return {"agent_answer": answer, "document_idx": 1}
+    
+    def __create_summary_refinement_chain(self):
+        prompt = ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """\
+                    Anda diminta *memperbaiki* ringkasan.
+
+                    Ringkasan sementara:
+                    {existing_answer}
+
+                    Konteks tambahan:
+                    {context}
+
+                    ### Instruksi
+                    • Tambahkan fakta penting yang belum tercakup.
+                    • Perbaiki kesalahan, hindari pengulangan.
+                    • Tetap ≤ 120 kata dan tutup dengan "👉 Ringkasan selesai".\
+                    """,
+                )
+            ]
+        )
+        return prompt | self.__generative_adapter.chat_model.with_structured_output(AgentResponseV2)
+    
+
+    def __generate_summary_refinement(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        refined = self.__create_summary_refinement_chain().invoke(
+            {
+                "existing_answer": state["agent_answer"].answer,
+                "context": state["document_from_user"][state["document_idx"]],
+            },
+            config=config,
+        )
+        refined.references.add(state["document_from_user"][state["document_idx"]].metadata["document_name"])
+        return {"agent_answer": refined, "document_idx": state["document_idx"] + 1}
+    
+    def __fetch_context(self, state: StateV2) -> StateV2:
+        """Retrieve vector‑similar docs to the user question."""
+        q_text = state["messages"][-1].content
+        vec_docs = self.__pgvector.similarity_search_with_relevance_scores(
+            query=str(q_text), score_threshold=0.6
+        )
+        # context = "\n".join(doc.page_content for doc, _ in vec_docs)
+        context: List[Document] = list()
+        for doc, _ in vec_docs:
+            context.append(doc)
+        return {"context": context}
+    
+
+    def __create_answer_chain(self):
+        template = r"""
+            <MAIN_PROMPT>
+            Anda adalah pembantu yang handal untuk menjawab pertanyaan dan meringkas dokumen.
+
+            ### Konteks referensi
+            {context}
+
+            ### Riwayat Percakapan
+            {conversation}
+
+            ### Pertanyaan sekarang
+            {question}
+
+            ### Aturan global
+            1. Balas dengan bahasa yang sama yang digunakan pengguna, kecuali diminta sebaliknya.
+            """
+        return (
+            ChatPromptTemplate([("human", template)])
+            | self.__generative_adapter.chat_model
+            | StrOutputParser()
+        )
+
+    def __generate_chat_response(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        chain = self.__create_answer_chain()
+        answer = chain.invoke(
+            {
+                "conversation": state["conversation"],
+                "question": state["conversation"][-1],
+                "context": state["context"],
+            },
+            config=config,
+        )
+        return {"answer": answer}

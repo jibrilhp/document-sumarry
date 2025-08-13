@@ -118,7 +118,10 @@ class ConversationUsecase:
             }
         } 
         response = chatbot.invoke(
-            input={"messages": [HumanMessage(content=conversation.message)]},
+            input={
+                "messages": [HumanMessage(content=conversation.message)],
+                "document_from_user": conversation.document_from_user if conversation.document_from_user is not None else [],
+            },
             config=config,
             stream_mode="values",
             output_keys=["agent_answer"]
