@@ -24,4 +24,5 @@ dependencies = [
     "passlib>=1.7.4",
     "slowapi>=0.1.9",
     "langchain-tavily>=0.2.11",
+    "langmem>=0.0.29",
 ]

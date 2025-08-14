@@ -19,6 +19,7 @@ from langchain_tavily import TavilySearch, TavilyExtract
 from langchain_core.messages import AIMessage
 from langchain_core.documents import Document
 from langchain_core.tools import tool
+from langmem.short_term import SummarizationNode, RunningSummary
 
 class ChatBotV2Repository:
     def __init__(
@@ -34,7 +35,8 @@ class ChatBotV2Repository:
 
     def create_chatbot_v2(self, thread_id: str):
         chatbot = ConversationalChatbot()
-        chatbot.add_conditional_edges(START, self.__should_summarize)
+        chatbot.add_edges(START, "summarize_conversation")
+        chatbot.add_conditional_edges("summarize_conversation", self.__should_summarize)
 
         chatbot.add_node("llm_router", self.__create_workflow_routing_chain)
         chatbot.add_node("general_assistance", self.__general_knowledge_agent_chain)
@@ -42,6 +44,8 @@ class ChatBotV2Repository:
        
         chatbot.add_node("initial_summary", self.__generate_initial_summary)
         chatbot.add_node("summary_refinement", self.__generate_summary_refinement)
+
+        chatbot.add_node("summarize_conversation", self.__summarization_node())
 
         chatbot.add_conditional_edges("llm_router", self.__llm_router)
         chatbot.add_conditional_edges("initial_summary", self.__should_refine)
@@ -182,8 +186,9 @@ class ChatBotV2Repository:
                 - Kurang = informasi tidak ada, tidak spesifik, atau tidak lengkap.
                 3. Jika kurang, gunakan tavily_search untuk mencari informasi tambahan di web.
                 4. Jika dari tavily_search terdapat URL yang relevan namun perlu isi lebih detail, gunakan tavily_extract.
+                3. Jika kurang, gunakan tavily_search dan tavily_extract untuk mencari informasi tambahan di web
                 5. Gabungkan semua informasi yang ditemukan menjadi satu jawaban terpadu.
-                6. Hilangkan duplikasi sumber dari semua alat, lalu masukkan ke dalam "references".
+                6. Ambil field `sources` dari `vector_search` untuk mengisi field `references`
                 7. Jika setelah semua langkah jawaban masih belum lengkap atau ambigu, set `needs_clarification=true` dan jelaskan kekurangannya.
                 8. Jika yakin, set `needs_clarification=false`.
             """
@@ -276,51 +281,10 @@ class ChatBotV2Repository:
         )
         refined.references.add(state["document_from_user"][state["document_idx"]].metadata["document_name"])
         return {"agent_answer": refined, "document_idx": state["document_idx"] + 1}
-    
-    def __fetch_context(self, state: StateV2) -> StateV2:
-        """Retrieve vector‑similar docs to the user question."""
-        q_text = state["messages"][-1].content
-        vec_docs = self.__pgvector.similarity_search_with_relevance_scores(
-            query=str(q_text), score_threshold=0.6
+
+
+    def __summarization_node(self) -> SummarizationNode:
+        return SummarizationNode(
+            model=self.__generative_adapter.chat_model,
+            max_tokens=512,
         )
-        # context = "\n".join(doc.page_content for doc, _ in vec_docs)
-        context: List[Document] = list()
-        for doc, _ in vec_docs:
-            context.append(doc)
-        return {"context": context}
-    
-
-    def __create_answer_chain(self):
-        template = r"""
-            <MAIN_PROMPT>
-            Anda adalah pembantu yang handal untuk menjawab pertanyaan dan meringkas dokumen.
-
-            ### Konteks referensi
-            {context}
-
-            ### Riwayat Percakapan
-            {conversation}
-
-            ### Pertanyaan sekarang
-            {question}
-
-            ### Aturan global
-            1. Balas dengan bahasa yang sama yang digunakan pengguna, kecuali diminta sebaliknya.
-            """
-        return (
-            ChatPromptTemplate([("human", template)])
-            | self.__generative_adapter.chat_model
-            | StrOutputParser()
-        )
-
-    def __generate_chat_response(self, state: StateV2, config: RunnableConfig) -> StateV2:
-        chain = self.__create_answer_chain()
-        answer = chain.invoke(
-            {
-                "conversation": state["conversation"],
-                "question": state["conversation"][-1],
-                "context": state["context"],
-            },
-            config=config,
-        )
-        return {"answer": answer}

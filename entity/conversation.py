@@ -1,13 +1,13 @@
 from typing import Annotated, List, Set
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, MessagesState
 from langgraph.graph.message import add_messages
 from langchain_core.runnables.base import RunnableLike
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AnyMessage, BaseMessage
 
 class Conversation(BaseModel):
     project_id: str | None = ""
@@ -57,11 +57,14 @@ class AgentResponseV2(BaseModel):
     references: Set[str] = Field(description="list of resource's url")
     needs_clarification: bool = Field(description="Whether system needed clarification from user or not")
     
-class StateV2(TypedDict):
-    messages: Annotated[List[BaseMessage], add_messages]
+class StateV2(MessagesState):
+    # Conversation memory
+    summarized_messages: List[AnyMessage]
+    # Agent related
     router_output: str
     question: str
     agent_answer: AgentResponseV2
+    # Document related
     document_from_user: List[Document]
     document_idx: int
     context: List[Document]
