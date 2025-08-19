@@ -1,4 +1,4 @@
-from typing import Annotated, List, Set
+from typing import Annotated, List, Optional, Set
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.graph.message import add_messages
@@ -50,13 +50,40 @@ class ConversationalChatbot:
         app = self._graph_builder.compile(checkpointer=checkpointer)
         return app
     
-    
+class RouterOutputV2(BaseModel):
+    """Response from LLM Router"""
+    output_router: str = Field(description="The output of the LLM Router")
+    table_name: str = Field(description="The name of the table to be used choosen by LLM")
+    rephrased_question: str = Field(description="The rephrased question of the user's question")
+
+
 class AgentResponseV2(BaseModel):
     """Response for user's question"""
     answer: str = Field(description="The answer of the user's question")
     references: Set[str] = Field(description="list of resource's url")
     needs_clarification: bool = Field(description="Whether system needed clarification from user or not")
     
+class DatabaseConfig(BaseModel):
+    dataset_name: str
+    db_type: str
+    db_host: str
+    db_port: int
+    db_name: str
+    db_username: str
+    db_password: str
+    table_name: str
+    db_uri: Optional[str] = ""
+
+    def set_db_uri(self) -> str:
+        if self.db_type == "postgresql":
+            return f"postgresql://{self.db_username}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        elif self.db_type == "mysql":
+            return f"mysql://{self.db_username}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        elif self.db_type == "sqlite":
+            return f"sqlite:///{self.dataset_name}"
+        else:
+            raise ValueError(f"Unsupported database type: {self.db_type}")
+
 class StateV2(MessagesState):
     # Conversation memory
     summarized_messages: List[AnyMessage]
@@ -68,4 +95,7 @@ class StateV2(MessagesState):
     document_from_user: List[Document]
     document_idx: int
     context: List[Document]
+    # Database related
+    database_config: List[DatabaseConfig]
+    db_name: str
 

@@ -9,14 +9,23 @@ from repository.document import DocumentRepository
 from repository.chatbot_v2 import ChatBotV2Repository
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import HumanMessage
+from repository.client_db import ClientDatabaseRepository
 
 class ConversationUsecase:
-    def __init__(self, ollama_adapter: GenerativeAdapter, chatbot_repository: ChatBotRepository, document_repository: DocumentRepository, chatbotv2_repository: ChatBotV2Repository):
+    def __init__(
+        self, 
+        ollama_adapter: GenerativeAdapter, 
+        chatbot_repository: ChatBotRepository, 
+        document_repository: DocumentRepository, 
+        chatbotv2_repository: ChatBotV2Repository,
+        client_db_repository: ClientDatabaseRepository
+    ):
         self.logger = logging.getLogger(__name__)
         self.ollama_adapter = ollama_adapter
         self.chatbot_repository = chatbot_repository
         self.document_repository = document_repository
         self.__chatbotv2_repository = chatbotv2_repository
+        self.__client_db_repository = client_db_repository
 
     def __retrieve_chatbot(self, conversation: Conversation):
         self.logger.info("conversation request with conversation_uuid {}".format(conversation.conversation_uuid))
@@ -112,15 +121,17 @@ class ConversationUsecase:
     
     def chat_with_agentv2(self, conversation: Conversation):
         chatbot = self.__retrieve_chatbotv2(conversation=conversation)
+        client_db = self.__client_db_repository.get_client_db(conversation=conversation)
         config: RunnableConfig = {
             "configurable": {
                 "thread_id": conversation.conversation_uuid
             }
-        } 
+        }
         response = chatbot.invoke(
             input={
                 "messages": [HumanMessage(content=conversation.message)],
                 "document_from_user": conversation.document_from_user if conversation.document_from_user is not None else [],
+                "database_config": client_db,
             },
             config=config,
             stream_mode="values",

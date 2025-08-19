@@ -29,10 +29,25 @@ services:
       - pgdata:/var/lib/postgresql/data # Mount volume for data persistence
     networks:
       - dst-networks
+  postgres-sql-demo:
+    image: pgvector/pgvector:pg16 # Official image with pgvector pre-installed
+    container_name: document_pg_vector_sql_demo
+    environment:
+      POSTGRES_USER: admin # Set your PostgreSQL username
+      POSTGRES_PASSWORD: password # Set your PostgreSQL password
+      POSTGRES_DB: mydatabase # Set your default database name
+    ports:
+      - "54332:5432" # Expose PostgreSQL on port 5432
+    volumes:
+      - pgdata-sql-demo:/var/lib/postgresql/data # Mount volume for data persistence
+    networks:
+      - dst-networks
 
 volumes:
   pgdata:
     driver: local
+  pgdata-sql-demo:
+
 
 networks:
   dst-networks:

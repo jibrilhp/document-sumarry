@@ -1,4 +1,4 @@
-from typing import Dict, Literal, List
+from typing import Dict, Literal, List, Set
 from entity.conversation import ConversationalChatbot
 from entity.tools import VectorSearchInput, VectorSearchOutput
 from infra.generative_provider import GenerativeAdapter
@@ -7,7 +7,7 @@ import logging
 from langgraph.graph import START, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.prompts import ChatPromptTemplate
-from entity.conversation import StateV2, AgentResponseV2
+from entity.conversation import StateV2, AgentResponseV2, RouterOutputV2, DatabaseConfig
 from langchain_core.runnables import RunnableConfig
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
@@ -19,7 +19,9 @@ from langchain_tavily import TavilySearch, TavilyExtract
 from langchain_core.messages import AIMessage
 from langchain_core.documents import Document
 from langchain_core.tools import tool
-from langmem.short_term import SummarizationNode, RunningSummary
+from langmem.short_term import SummarizationNode
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 
 class ChatBotV2Repository:
     def __init__(
@@ -32,6 +34,7 @@ class ChatBotV2Repository:
         self.__checkpointer = postgres_adapter.get_checkpointer()
         self.__logger = logging.getLogger(__name__)
         self.__chat_states: Dict[str, CompiledStateGraph] = {}
+        self.__create_sql_database = postgres_adapter.create_sql_database
 
     def create_chatbot_v2(self, thread_id: str):
         chatbot = ConversationalChatbot()
@@ -41,6 +44,7 @@ class ChatBotV2Repository:
         chatbot.add_node("llm_router", self.__create_workflow_routing_chain)
         chatbot.add_node("general_assistance", self.__general_knowledge_agent_chain)
         chatbot.add_node("specific_assistance", self.__specific_knowledge_agent_chain)
+        chatbot.add_node("sql_assistant", self.__sql_agent_chain)
        
         chatbot.add_node("initial_summary", self.__generate_initial_summary)
         chatbot.add_node("summary_refinement", self.__generate_summary_refinement)
@@ -53,7 +57,7 @@ class ChatBotV2Repository:
 
         chatbot.add_edges("general_assistance", END)
         chatbot.add_edges("specific_assistance", END)
-
+        chatbot.add_edges("sql_assistant", END)
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
         g = compiled_graph.get_graph().draw_mermaid_png()
         with open("chatbot_v2.png", "w+b") as f:
@@ -82,6 +86,8 @@ class ChatBotV2Repository:
                 query=query, k=k, score_threshold=score_threshold
             )
             output = VectorSearchOutput(sources=set(), query=query, documents=[], scores=[], total_results=0)
+            output.scores = list()
+            output.sources = set()
             for doc, score in related_docs:
                 output.documents.append(doc.page_content)
                 output.scores.append(score)
@@ -103,34 +109,37 @@ class ChatBotV2Repository:
                 If user ask about general knowledge and has no correlation to previous conversation. You should route to this workflow
                 2. specific_assistance:
                 If user ask about specific knowledge and has correlation to previous conversation, use this workflow.
+                3. sql_assistant:
+                If user ask about either of these {dataset_name} related topics, use this workflow. Fill table_name of the response with one of these table names:{table_name}.
            
-                You should output either `general_assistance` and `specific_assistance`.
+                You should output either `general_assistance`, `specific_assistance` and `sql_assistant`.
 
                 Question:
                 {input}
              """
         )
-        return prompt | self.__generative_adapter.chat_model
+        return prompt | self.__generative_adapter.chat_model.with_structured_output(RouterOutputV2)
     
     def __create_workflow_routing_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
         question = state["messages"][-1]      
         response = self.__create_workflow_routing_prompt().invoke(
             {
-                "input": question
+                "input": question,
+                "dataset_name": ", ".join([db.dataset_name for db in state["database_config"]]),
+                "table_name": ", ".join([db.table_name for db in state["database_config"]])
             },
             config
         )
-        output_router = str(response.content)
-        output_router_msg = AIMessage(
-            content=output_router
-        )
-        return {"messages": [output_router_msg], "router_output": output_router, "question": str(question)}
+        output_router: RouterOutputV2 = response
+        return {"router_output": output_router.output_router, "question": output_router.rephrased_question, "db_name": output_router.table_name}
     
-    def __llm_router(self, state: StateV2) -> Literal["specific_assistance", "general_assistance"]:
+    def __llm_router(self, state: StateV2) -> Literal["specific_assistance", "general_assistance", "sql_assistant"]:
         route = state.get("router_output")
         self.__logger.info("llm router answer: {}".format(route))
         if route == "general_assistance":
             return "general_assistance"
+        if route == "sql_assistant":
+            return "sql_assistant"
         return "specific_assistance"    
     
     def __general_knowledge_agent(self) -> Runnable:
@@ -288,3 +297,77 @@ class ChatBotV2Repository:
             model=self.__generative_adapter.chat_model,
             max_tokens=512,
         )
+
+    def __sql_agent(self, db: SQLDatabase, toolkit: SQLDatabaseToolkit) -> Runnable:
+        system_prompt = """
+        You are an agent designed to interact with a SQL database.
+        Given an input question, create a syntactically correct {dialect} query to run,
+        then look at the results of the query and return the answer. Unless the user
+        specifies a specific number of examples they wish to obtain, always limit your
+        query to at most {top_k} results.
+
+        You can order the results by a relevant column to return the most interesting
+        examples in the database. Never query for all the columns from a specific table,
+        only ask for the relevant columns given the question.
+
+        You MUST double check your query before executing it. If you get an error while
+        executing a query, rewrite the query and try again.
+
+        DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the
+        database.
+
+        To start you should ALWAYS look at the tables in the database to see what you
+        can query. Do NOT skip this step.
+
+        Then you should query the schema of the most relevant tables.
+        """.format(
+            dialect=db.dialect,
+            top_k=5,
+        )
+        react_agent = create_react_agent(
+            debug=True,            
+            response_format=AgentResponseV2,
+            model=self.__generative_adapter.chat_model, 
+            tools=toolkit.get_tools(),
+            prompt=system_prompt
+        )
+        return react_agent
+        
+    def __sql_agent_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        try:
+            db_config: List[DatabaseConfig] = state.get("database_config", [])
+            db_name: str = state.get("db_name", "")
+            
+            if not db_config:
+                return {"agent_answer": AgentResponseV2(
+                    answer="No database configuration found. Please check your database settings.",
+                    references=set(),
+                    needs_clarification=False
+                )}
+            
+            selected_db = [db for db in db_config if db.table_name == db_name]
+            if not selected_db:
+                return {"agent_answer": AgentResponseV2(
+                    answer=f"Database '{db_name}' not found in available configurations.",
+                    references=set(),
+                    needs_clarification=False
+                )}
+            
+            selected_db = selected_db[0]
+            sql_db = self.__create_sql_database(str(selected_db.db_uri), {selected_db.table_name})
+            toolkit = SQLDatabaseToolkit(db=sql_db, llm=self.__generative_adapter.chat_model)
+            agent = self.__sql_agent(sql_db, toolkit)
+            
+            # Use correct input format for create_react_agent
+            response = agent.invoke({"messages": [state.get("question")]}, config=config)
+            
+            structured_response: AgentResponseV2 = response.get("structured_response")
+            
+            return {"agent_answer": structured_response}
+            
+        except Exception as e:
+            return {"agent_answer": AgentResponseV2(
+                answer=f"Error executing SQL query: {str(e)}",
+                references=set(),
+                needs_clarification=False
+            )}
