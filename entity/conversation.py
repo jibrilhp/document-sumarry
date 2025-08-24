@@ -82,6 +82,7 @@ class DatabaseConfig(BaseModel):
     db_password: str
     table_name: str
     db_uri: Optional[str] = ""
+    column_metadata: Optional[str] = ""
 
     def set_db_uri(self) -> str:
         if self.db_type == "postgresql":

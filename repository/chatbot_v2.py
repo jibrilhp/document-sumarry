@@ -39,7 +39,6 @@ class ChatBotV2Repository:
         chatbot.add_conditional_edges("summarize_conversation", self.__should_summarize)
 
         chatbot.add_node("llm_router", self.__create_workflow_routing_chain)
-        chatbot.add_node("general_assistance", self.__general_knowledge_agent_chain)
         chatbot.add_node("specific_assistance", self.__specific_knowledge_agent_chain)
         chatbot.add_node("sql_assistant", self.__sql_agent_chain)
         chatbot.add_node("chart_generator", self.__generate_chart)
@@ -135,43 +134,6 @@ class ChatBotV2Repository:
         if route == "sql_assistant":
             return "sql_assistant"
         return "specific_assistance"    
-    
-    def __general_knowledge_agent(self) -> Runnable:
-        react_agent = create_react_agent(
-            debug=True,            
-            response_format=AgentResponseV2,
-            model=self.__generative_adapter.chat_model, 
-            tools=[self.__tavily_search_tools(), self.__tavily_extract_tool()],
-            prompt="""
-             You are a friendly and knowledgeable assistant designed to help everyday users with clear, accurate, and engaging answers. Your mission is to answer questions in a way that's easy to understand, using a step-by-step process to ensure the best response. Here's how you work:
-
-             1. **Get the Question**: Carefully read the user's question to understand what they're asking and why. Check the conversation history to see if past chats give extra context.
-             2. **Gather Information**: If the question needs up-to-date info or details you don't have, use the web search tool to find relevant data. Summarize what you find to keep it focused and useful.
-             3. **Make a Plan**: Combine your built-in knowledge, past conversation context, and any web search results to decide how to answer. Plan steps like answering directly, summarizing web info, or asking for clarification if the question isn't clear.
-             4. **Deliver the Answer**: Follow your plan to create a response that's concise, friendly, and helpful
-
-             **How to Behave**:
-             - Keep answers simple, warm, and easy to follow, like chatting with a friend.
-             - Only use the web search tool when you need fresh or specific info—don't overdo it.
-             - If the question is vague, politely ask for more details to nail the response.
-             - For tricky or sensitive topics, stay neutral and kind.
-             - If you're unsure or can't find enough info, say so honestly and point users to reliable sources (e.g., “For more details, check trusted websites or official sources”).        
-            """
-        )
-        return react_agent
-    
-    def __general_knowledge_agent_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
-        try:
-            agent = self.__general_knowledge_agent()
-            response = agent.invoke({"messages": [state.get("question")]}, config=config)
-            output: AgentResponseV2 = response.get("structured_response")
-            return {"agent_answer": output}
-        except Exception as e:
-            print(e)
-            raise
-            
-        return state
-    
         
     def __specific_knowledge_agent(self) -> Runnable:
         react_agent = create_react_agent(
@@ -292,7 +254,7 @@ class ChatBotV2Repository:
             max_tokens=512,
         )
 
-    def __sql_agent(self, db: SQLDatabase, toolkit: SQLDatabaseToolkit) -> Runnable:
+    def __sql_agent(self, db: SQLDatabase, toolkit: SQLDatabaseToolkit, column_metadata: str) -> Runnable:
         system_prompt = """
             You are an agent designed to interact with a SQL database and provide data visualizations.
 
@@ -327,6 +289,9 @@ class ChatBotV2Repository:
 
             You MUST always return output that conforms to the AgentResponseV2 schema.
 
+            Column Metadata:
+            {column_metadata}
+
             - "answer": natural language explanation
             - "references": set of URLs (empty if none)
             - "needs_clarification": boolean
@@ -340,6 +305,7 @@ class ChatBotV2Repository:
         """.format(
             dialect=db.dialect,
             top_k=5,
+            column_metadata=column_metadata
         )
         react_agent = create_react_agent(
             debug=True,            
@@ -373,7 +339,7 @@ class ChatBotV2Repository:
             selected_db = selected_db[0]
             sql_db = self.__create_sql_database(str(selected_db.db_uri), {selected_db.table_name})
             toolkit = SQLDatabaseToolkit(db=sql_db, llm=self.__generative_adapter.chat_model)
-            agent = self.__sql_agent(sql_db, toolkit)
+            agent = self.__sql_agent(sql_db, toolkit, column_metadata=selected_db.column_metadata)
             
             # Use correct input format for create_react_agent
             response = agent.invoke({"messages": [state.get("question")]}, config=config)

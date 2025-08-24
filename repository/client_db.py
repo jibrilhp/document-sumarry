@@ -9,7 +9,7 @@ class ClientDatabaseRepository:
 
     def get_client_db(self, conversation: Conversation) -> List[DatabaseConfig]:
         with self.__db_adapter.get_connection() as conn:
-            sql = "select d.dataset_name, db_type, db_host, db_port, db_name, d.table_name, db_username, db_password from databases inner join datasets d on d.database_id = databases.id where d.created_by = %s ;"
+            sql = "select d.dataset_name, db_type, db_host, db_port, db_name, d.table_name, db_username, db_password, column_metadata from databases inner join datasets d on d.database_id = databases.id where d.created_by = %s ;"
             data = (conversation.tenant_id,)
             results = conn.cursor().execute(sql, data).fetchall()
             results_db: List[DatabaseConfig] = list()
@@ -22,7 +22,8 @@ class ClientDatabaseRepository:
                     db_name=result[4],
                     table_name=result[5],
                     db_username=result[6],
-                    db_password=result[7]
+                    db_password=result[7],
+                    column_metadata=result[8]
                 )
                 db_config.db_uri = db_config.set_db_uri()
                 results_db.append(db_config)
