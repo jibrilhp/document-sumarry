@@ -12,6 +12,8 @@ services:
       - "8000:8000"
     depends_on:
       - postgres
+    extra_hosts:
+      - "host.docker.internal:host-gateway" 
     networks:
       - dst-networks
     volumes:
@@ -20,9 +22,9 @@ services:
     image: pgvector/pgvector:pg16 # Official image with pgvector pre-installed
     container_name: document_pg_vector
     environment:
-      POSTGRES_USER: admin # Set your PostgreSQL username
-      POSTGRES_PASSWORD: password # Set your PostgreSQL password
-      POSTGRES_DB: mydatabase # Set your default database name
+      POSTGRES_USER: develop # Set your PostgreSQL username
+      POSTGRES_PASSWORD: password  # Set your PostgreSQL password
+      POSTGRES_DB: dtskul # Set your default database name
     ports:
       - "5432:5432" # Expose PostgreSQL on port 5432
     volumes:
