@@ -47,9 +47,8 @@ class ConversationUsecase:
             }
         }
         response = chatbot.invoke(
-            input={"conversation": [{
-                "role": "user", "content": conversation.message,
-                }], 
+            input={ 
+                "messages": [HumanMessage(content=conversation.message)], 
                 "document_from_user": conversation.document_from_user,
                 "tenant_id": conversation.tenant_id,
                 "project_uuid": conversation.project_id,
