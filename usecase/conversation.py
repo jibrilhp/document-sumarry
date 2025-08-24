@@ -124,8 +124,9 @@ class ConversationUsecase:
         client_db = self.__client_db_repository.get_client_db(conversation=conversation)
         config: RunnableConfig = {
             "configurable": {
-                "thread_id": conversation.conversation_uuid
-            }
+                "thread_id": conversation.conversation_uuid,
+            },
+            "recursion_limit": 25 if conversation.document_from_user.__len__() == 0 else len(conversation.document_from_user) * 2
         }
         response = chatbot.invoke(
             input={

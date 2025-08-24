@@ -97,6 +97,9 @@ class DatabaseConfig(BaseModel):
 class StateV2(MessagesState):
     # Conversation memory
     summarized_messages: List[AnyMessage]
+    conversation_memory: str
+    memory_retrieved: bool
+    memory_updated: bool
     # Agent related
     router_output: str
     question: str
