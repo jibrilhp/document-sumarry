@@ -10,7 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import START, END
-from langgraph.graph.graph import CompiledGraph
+from langgraph.graph.state import CompiledStateGraph
 
 # SQL Agent imports
 from langchain_community.utilities import SQLDatabase
@@ -466,7 +466,7 @@ class ChatBotRepository:
         else:
             return "generate_chat_response"
 
-    def create_chatbot(self, thread_id: str) -> CompiledGraph:
+    def create_chatbot(self, thread_id: str) -> CompiledStateGraph:
         chatbot = ConversationalChatbot()
 
         # Existing nodes
@@ -522,7 +522,7 @@ class ChatBotRepository:
         self.chat_states[thread_id] = compiled_graph
         return compiled_graph
 
-    def get_chatbot(self, thread_id: str) -> CompiledGraph | None:
+    def get_chatbot(self, thread_id: str) -> CompiledStateGraph | None:
         return self.chat_states.get(thread_id)
 
     # Existing chain methods (unchanged)
@@ -857,7 +857,7 @@ class ChatBotRepository:
         return "analyze_database"
 
     @staticmethod
-    def get_chat_history(config: RunnableConfig, compiled_graph: CompiledGraph) -> List[ConversationState]:
+    def get_chat_history(config: RunnableConfig, compiled_graph: CompiledStateGraph) -> List[ConversationState]:
         """Return list of ConversationState objects for external rendering."""
         conversation_list: List[ConversationState] = []
         conv_state = compiled_graph.get_state(config).values.get("conversation") or []

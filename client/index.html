@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Summary Client</title>
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .response {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+
+        .answer {
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .chart-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            background-color: white;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Document Summary Client</h1>
+
+        <form id="conversationForm">
+            <div class="form-group">
+                <label for="apiKey">API Key:</label>
+                <input type="text" id="apiKey" value="$2b$12$0sfbNhgMakPC4.S5hJyYx.qW0Vozwsgpzc12PvKZ4Rd98tYtMlILC"
+                    required>
+            </div>
+
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" value="johndoe" required>
+            </div>
+
+            <div class="form-group">
+                <label for="authorization">Authorization Token:</label>
+                <input type="text" id="authorization"
+                    value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2huZG9lIiwiaXNzIjoiZG9jdW1lbnQtc3VtbWFyeS1hcHAiLCJpYXQiOjE3NTU0MjMyOTYsImV4cCI6MTc1NTUwOTY5Nn0.dmiEQc0nyOYFIzARue4di0lXCZel-mDeNwhG9c78Pfk"
+                    required>
+            </div>
+
+            <div class="form-group">
+                <label for="projectId">Project ID:</label>
+                <input type="text" id="projectId" value="14e323af-3895-5435-ade2-f9328e0a890b" required>
+            </div>
+
+            <div class="form-group">
+                <label for="conversationUuid">Conversation UUID:</label>
+                <input type="text" id="conversationUuid" value="b0dce2a9-a6fa-4267-9959-b0790fe05baq" required>
+            </div>
+
+            <div class="form-group">
+                <label for="message">Message:</label>
+                <textarea id="message"
+                    required>Selain Indonesia, kewarganegaraan apa saja yang masuk ke Indonesia di tahun 2023? Berikan saya 3 negara dengan jumlah turis terbanyak beserta jumlahnya</textarea>
+            </div>
+
+            <button type="submit" id="submitBtn">Send Message</button>
+        </form>
+
+        <div id="loading" class="loading" style="display: none;">
+            Sending message...
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="response" class="response" style="display: none;">
+            <h3>Response:</h3>
+            <div id="answer" class="answer"></div>
+            <div id="chartContainer" class="chart-container"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('conversationForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const response = document.getElementById('response');
+            const error = document.getElementById('error');
+
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            response.style.display = 'none';
+            error.style.display = 'none';
+
+            try {
+                const formData = new FormData();
+                formData.append('project_id', document.getElementById('projectId').value);
+                formData.append('conversation_uuid', document.getElementById('conversationUuid').value);
+                formData.append('message', document.getElementById('message').value);
+
+                const response = await fetch('http://localhost:8000/v2/internal/conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Api-Key': document.getElementById('apiKey').value,
+                        'Username': document.getElementById('username').value,
+                        'Authorization': `Bearer ${document.getElementById('authorization').value}`
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayResponse(data);
+
+            } catch (err) {
+                console.error('Error:', err);
+                error.textContent = `Error: ${err.message}`;
+                error.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        function displayResponse(data) {
+            const responseDiv = document.getElementById('response');
+            const answerDiv = document.getElementById('answer');
+            const chartContainer = document.getElementById('chartContainer');
+
+            answerDiv.textContent = data.answer || 'No answer provided';
+
+            if (data.chart && data.chart.chart_spec) {
+                try {
+                    const chartSpec = JSON.parse(data.chart.chart_spec);
+                    renderChart(chartSpec, chartContainer);
+                } catch (err) {
+                    console.error('Error parsing chart spec:', err);
+                    chartContainer.innerHTML = '<p>Error rendering chart: Invalid chart specification</p>';
+                }
+            } else {
+                chartContainer.innerHTML = '<p>No chart data available</p>';
+            }
+
+            responseDiv.style.display = 'block';
+        }
+
+        function renderChart(chartSpec, container) {
+            container.innerHTML = '<div id="vega-chart"></div>';
+
+            vegaEmbed('#vega-chart', chartSpec, {
+                actions: false,
+                theme: 'default'
+            }).then(function (result) {
+                console.log('Chart rendered successfully');
+            }).catch(function (error) {
+                console.error('Error rendering chart:', error);
+                container.innerHTML = '<p>Error rendering chart</p>';
+            });
+        }
+    </script>
+</body>
+
+</html>

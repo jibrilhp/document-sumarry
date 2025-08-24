@@ -30,7 +30,7 @@ class StorageRepository:
         metadatas: List[dict] = list()
         for page in reader.pages:
             extracted_text += self.clean_text(page.extract_text())
-            metadatas.append({"tenant_id": document.tenant_id, "project_uuid": document.project_uuid})
+            metadatas.append({"tenant_id": document.tenant_id, "project_uuid": document.project_uuid, "document_name": document.document_name})
         splitted_texts = text_splitter.split_text(extracted_text)
         documents = text_splitter.create_documents(splitted_texts, metadatas)
         return documents

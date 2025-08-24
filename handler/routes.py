@@ -385,6 +385,57 @@ class Routes:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
+        @self.app.post("/v2/internal/conversation")    
+        async def create_internal_chat_session_v2(
+            request: Request,
+            api_key: Annotated[str,  Header()],
+            project_id: Annotated[str,  Form()],
+            conversation_uuid: Annotated[str, Form()],
+            message: Annotated[str, Form()],
+            username: Annotated[str | None, Header()] = None,
+            files: List[UploadFile] | None = None,
+        ):
+                if username is None:
+                    username = ""
+                    self.user_usecase.get_api_key_internal(api_key=api_key)
+                else:
+                    self.user_usecase.get_api_key(username=username, api_key=api_key)
+                conversation = Conversation(
+                    project_id=project_id,
+                    conversation_uuid=conversation_uuid,
+                    message=message,
+                    tenant_id=username,
+                )
+                if files is not None:
+                    __check_file_validity(files)
+                    for file in files:
+                        document = Document(file=file)
+                        document.set_multinancy_attr(project_uuid=project_id, tenant_id=username)
+                        document_db = self.document_usecase.store_document(document=document)
+                        langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                        conversation.document_from_user.extend(langchain_document)
+                
+                conversation.project_id = project_id
+                conversation.tenant_id = username
+                response = self.conversation_usecase.chat_with_agentv2(conversation=conversation)
+                # request.state.req_token = req_token
+                # request.state.res_token = res_token
+                return response
+            # except UnauthorizedAccess as e:
+            #     self.logger.error(str(e))
+            #     raise HTTPException(status.HTTP_403_FORBIDDEN, "unauthorized access, please provide valid API key")
+            # except ResourceNotFound as e:
+            #     self.logger.error(str(e))
+            #     raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+            # except FileTooLarge as e:
+            #     self.logger.error(str(e))
+            #     raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(e))
+            # except UnknownFileType as e:
+            #     self.logger.error(str(e))
+            #     raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+            # except Exception as e:
+            #     self.logger.error(str(e))
+            #     raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
         @self.app.get("/")
         def index():
