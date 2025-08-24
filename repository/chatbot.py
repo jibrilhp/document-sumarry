@@ -578,7 +578,7 @@ class ChatBotRepository:
             {context}
 
             ### Riwayat Percakapan
-            {conversation}
+            {messages}
 
             ### Pertanyaan sekarang
             {question}
@@ -644,7 +644,7 @@ class ChatBotRepository:
 
     def __fetch_context(self, state: State) -> State:
         """Retrieve vector‑similar docs to the user question."""
-        q_text = state["conversation"][-1].content
+        q_text = state["messages"][-1].content
         vec_docs = self.pgvector.similarity_search_with_relevance_scores(
             query=q_text, score_threshold=0.6
         )
@@ -671,15 +671,15 @@ class ChatBotRepository:
             ]
         )
         chain = prompt | self.generative_adapter.chat_model | StrOutputParser()
-        answer = chain.invoke({"question": state["conversation"][-1].content})
+        answer = chain.invoke({"question": state["messages"][-1].content})
         return {"answer": answer}
 
     def __generate_chat_response(self, state: State) -> State:
         chain = self.__create_answer_chain()
         answer = chain.invoke(
             {
-                "conversation": state["conversation"],
-                "question": state["conversation"][-1],
+                "messages": state["messages"],
+                "question": state["messages"][-1],
                 "context": state["context"],
             }
         )
@@ -688,7 +688,7 @@ class ChatBotRepository:
     # SQL analysis node methods
     def __get_database_summary(self, state: State) -> State:
         """Get database summary and structure information"""
-        question = state["conversation"][-1].content
+        question = state["messages"][-1].content
 
         # Check if user is asking about a specific database
         if "dtskul" in question.lower() or "database" in question.lower():
@@ -704,7 +704,7 @@ class ChatBotRepository:
 
     def __analyze_database(self, state: State) -> State:
         """Perform database analysis using SQL agent"""
-        question = state["conversation"][-1].content
+        question = state["messages"][-1].content
 
         # Check if we have database summary context
         context = state.get("db_summary", "")
@@ -822,7 +822,7 @@ class ChatBotRepository:
 
 
     def __add_answer_to_conversation(self, state: State) -> State:
-        return {"conversation": [state["answer"]]}
+        return {"messages": [state["answer"]]}
 
     # Enhanced conditional edge methods
     def __should_summarize(self, state: State) -> Literal["fetch_context", "generate_initial_summary"]:
@@ -839,7 +839,7 @@ class ChatBotRepository:
     def __route_after_context(
         self, state: State
     ) -> Literal["simulate_sentiment", "generate_chat_response", "get_database_summary", "parse_anomaly_reason"]:
-        question = state["conversation"][-1].content
+        question = state["messages"][-1].content
 
         if _is_xai_request(question):
             return "parse_anomaly_reason"
@@ -860,7 +860,7 @@ class ChatBotRepository:
     def get_chat_history(config: RunnableConfig, compiled_graph: CompiledStateGraph) -> List[ConversationState]:
         """Return list of ConversationState objects for external rendering."""
         conversation_list: List[ConversationState] = []
-        conv_state = compiled_graph.get_state(config).values.get("conversation") or []
+        conv_state = compiled_graph.get_state(config).values.get("messages") or []
         for idx, msg in enumerate(conv_state, start=1):
             if idx % 2:  # odd = question
                 conv = ConversationState()

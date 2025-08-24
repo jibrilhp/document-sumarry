@@ -17,13 +17,12 @@ class Conversation(BaseModel):
     document_from_user: List[Document] | None = list()
     is_stream: bool | None = False
 
-class State(TypedDict):
+class State(MessagesState):
     context: str
     question: str
     answer: str
     index: int
     document_from_user: List[Document]
-    conversation: Annotated[list, add_messages]
     tenant_id: str
     project_uuid: str
     request_token_count: int
