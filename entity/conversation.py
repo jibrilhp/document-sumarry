@@ -1,4 +1,4 @@
-from typing import Annotated, List, Optional, Set
+from typing import Annotated, List, Optional, Set, Dict, Any
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.graph.message import add_messages
@@ -57,11 +57,20 @@ class RouterOutputV2(BaseModel):
     rephrased_question: str = Field(description="The rephrased question of the user's question")
 
 
+class ChartData(BaseModel):
+    """Chart visualization data using Vega-Lite specification"""
+    data: List[Dict[str, Any]]
+    chart_spec: str  # always a Vega-Lite v5 spec
+
 class AgentResponseV2(BaseModel):
     """Response for user's question"""
     answer: str = Field(description="The answer of the user's question")
     references: Set[str] = Field(description="list of resource's url")
     needs_clarification: bool = Field(description="Whether system needed clarification from user or not")
+    chart: Optional[ChartData] = Field(
+        default=None,
+        description="Chart visualization JSON Must contain `data` and Vega-Lite `chart_spec`."
+    )
     
 class DatabaseConfig(BaseModel):
     dataset_name: str

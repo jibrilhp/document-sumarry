@@ -1,4 +1,4 @@
-from typing import Dict, Literal, List, Set
+from typing import Dict, Literal, List
 from entity.conversation import ConversationalChatbot
 from entity.tools import VectorSearchInput, VectorSearchOutput
 from infra.generative_provider import GenerativeAdapter
@@ -7,17 +7,14 @@ import logging
 from langgraph.graph import START, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.prompts import ChatPromptTemplate
-from entity.conversation import StateV2, AgentResponseV2, RouterOutputV2, DatabaseConfig
+from entity.conversation import StateV2, AgentResponseV2, RouterOutputV2, DatabaseConfig, ChartData
 from langchain_core.runnables import RunnableConfig
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.base import RunnableSerializable
 from langgraph.prebuilt import create_react_agent
 from langchain_core.runnables import Runnable
 from langchain_core.tools.base import BaseTool
 from langchain_tavily import TavilySearch, TavilyExtract
-from langchain_core.messages import AIMessage
-from langchain_core.documents import Document
 from langchain_core.tools import tool
 from langmem.short_term import SummarizationNode
 from langchain_community.utilities import SQLDatabase
@@ -45,6 +42,7 @@ class ChatBotV2Repository:
         chatbot.add_node("general_assistance", self.__general_knowledge_agent_chain)
         chatbot.add_node("specific_assistance", self.__specific_knowledge_agent_chain)
         chatbot.add_node("sql_assistant", self.__sql_agent_chain)
+        chatbot.add_node("chart_generator", self.__generate_chart)
        
         chatbot.add_node("initial_summary", self.__generate_initial_summary)
         chatbot.add_node("summary_refinement", self.__generate_summary_refinement)
@@ -55,9 +53,9 @@ class ChatBotV2Repository:
         chatbot.add_conditional_edges("initial_summary", self.__should_refine)
         chatbot.add_conditional_edges("summary_refinement", self.__should_refine)
 
-        chatbot.add_edges("general_assistance", END)
         chatbot.add_edges("specific_assistance", END)
-        chatbot.add_edges("sql_assistant", END)
+        chatbot.add_edges("sql_assistant", "chart_generator")
+        chatbot.add_edges("chart_generator", END)
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
         g = compiled_graph.get_graph().draw_mermaid_png()
         with open("chatbot_v2.png", "w+b") as f:
@@ -105,14 +103,12 @@ class ChatBotV2Repository:
                 You should decide where to route user's request based on conversation and user question.
                 Given user question  and chat conversation you should route user request to either 3 workflow
                 
-                1. general_assistance: 
-                If user ask about general knowledge and has no correlation to previous conversation. You should route to this workflow
-                2. specific_assistance:
+                1. specific_assistance:
                 If user ask about specific knowledge and has correlation to previous conversation, use this workflow.
-                3. sql_assistant:
+                2. sql_assistant:
                 If user ask about either of these {dataset_name} related topics, use this workflow. Fill table_name of the response with one of these table names:{table_name}.
            
-                You should output either `general_assistance`, `specific_assistance` and `sql_assistant`.
+                You should output either `specific_assistance` and `sql_assistant`.
 
                 Question:
                 {input}
@@ -133,11 +129,9 @@ class ChatBotV2Repository:
         output_router: RouterOutputV2 = response
         return {"router_output": output_router.output_router, "question": output_router.rephrased_question, "db_name": output_router.table_name}
     
-    def __llm_router(self, state: StateV2) -> Literal["specific_assistance", "general_assistance", "sql_assistant"]:
+    def __llm_router(self, state: StateV2) -> Literal["specific_assistance", "sql_assistant"]:
         route = state.get("router_output")
         self.__logger.info("llm router answer: {}".format(route))
-        if route == "general_assistance":
-            return "general_assistance"
         if route == "sql_assistant":
             return "sql_assistant"
         return "specific_assistance"    
@@ -300,26 +294,49 @@ class ChatBotV2Repository:
 
     def __sql_agent(self, db: SQLDatabase, toolkit: SQLDatabaseToolkit) -> Runnable:
         system_prompt = """
-        You are an agent designed to interact with a SQL database.
-        Given an input question, create a syntactically correct {dialect} query to run,
-        then look at the results of the query and return the answer. Unless the user
-        specifies a specific number of examples they wish to obtain, always limit your
-        query to at most {top_k} results.
+            You are an agent designed to interact with a SQL database and provide data visualizations.
 
-        You can order the results by a relevant column to return the most interesting
-        examples in the database. Never query for all the columns from a specific table,
-        only ask for the relevant columns given the question.
+            Important: You must fill *all relevant fields* of the AgentResponseV2 schema.
+            Do not omit "chart" when data is visualizable.
+            
+            Important: "chart_spec" must be a valid JSON string. 
+            Do not enclose it in quotes. Output raw JSON for the chart_spec field.
 
-        You MUST double check your query before executing it. If you get an error while
-        executing a query, rewrite the query and try again.
+            Given an input question:
+            1. Create a syntactically correct {dialect} query to run.
+            2. Look at the results of the query and return the answer in JSON.
 
-        DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the
-        database.
+            Query guidelines:
+            - Unless the user specifies a specific number of examples, always LIMIT results to at most {top_k}.
+            - You can order the results by a relevant column to return the most interesting examples.
+            - Never query for all the columns from a table; only use relevant columns.
+            - Double check your query before executing it.
+            - If a query fails, rewrite and retry.
+            - DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.).
+            - Always check available tables first, then query the schema of the most relevant ones.
 
-        To start you should ALWAYS look at the tables in the database to see what you
-        can query. Do NOT skip this step.
+            Chart generation guidelines:
+            - When the query returns numerical or categorical data that could benefit from visualization, generate a chart specification.
+            - Use these defaults:
+            - Time-series data → line chart
+            - Categorical comparisons → bar chart
+            - Correlation between two numerical variables → scatter plot
+            - Proportions/percentages → pie chart
+            - Only suggest a chart when data is meaningful and has at least 2 data points.
+            - Always include the raw query results in the response.
 
-        Then you should query the schema of the most relevant tables.
+            You MUST always return output that conforms to the AgentResponseV2 schema.
+
+            - "answer": natural language explanation
+            - "references": set of URLs (empty if none)
+            - "needs_clarification": boolean
+            - "chart": 
+            - If data is visualizable, always fill with:
+                - "data": SQL rows
+                - "chart_spec": valid Vega-Lite v5 spec
+            - If not visualizable, return null
+
+            Do not place "data" and "chart_spec" at the top level. They must always be inside "chart".
         """.format(
             dialect=db.dialect,
             top_k=5,
@@ -371,3 +388,45 @@ class ChatBotV2Repository:
                 references=set(),
                 needs_clarification=False
             )}
+
+    def __chart_chain(self) -> Runnable:
+        prompt = ChatPromptTemplate.from_template("""
+            You are a chart generator.  
+            Given only the natural language answer from the database query, generate a valid Vega-Lite v5 chart specification.  
+
+            RULES:  
+            - Always return a JSON object with the following schema:
+            {{
+            "chart": {{
+                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                "data": {{"values": [ ... ]}},
+                "mark": "bar"
+            }}
+            }}
+
+            Always return `chart_spec` as a valid JSON object (not a string).
+            Do not wrap the chart specification in quotes.
+
+            - Parse the entities and numbers from the answer into "data.values".
+            - Select chart type:
+            - categorical comparisons → "mark": "bar"
+            - time series (date, year, month) → "mark": "line"
+            - two quantitative variables → "mark": "point"
+            - proportions/percentages → "mark": "arc"
+            - Use meaningful axis titles from the answer.
+            - Do not include explanations or extra text, only the JSON.  
+
+            ANSWER:  
+            {answer}
+        """)
+        return prompt | self.__generative_adapter.chat_model.with_structured_output(ChartData)
+    
+    def __generate_chart(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        agent_answer = state.get("agent_answer")
+        chart = self.__chart_chain().invoke(
+            {
+                "answer": agent_answer.answer
+            }, config=config)
+        chartData: ChartData = chart
+        agent_answer.chart = chartData
+        return {"agent_answer": agent_answer}
