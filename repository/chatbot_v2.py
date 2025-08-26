@@ -1,5 +1,5 @@
 from typing import Dict, Literal, List
-from entity.conversation import ConversationalChatbot
+from entity.conversation import ConversationalChatbot, ConversationStateV2
 from entity.tools import VectorSearchInput, VectorSearchOutput
 from infra.generative_provider import GenerativeAdapter
 from infra.data_store import PostgresAdapter
@@ -8,7 +8,6 @@ from langgraph.graph import START, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.prompts import ChatPromptTemplate
 from entity.conversation import StateV2, AgentResponseV2, RouterOutputV2, DatabaseConfig, ChartData
-from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.base import RunnableSerializable
 from langgraph.prebuilt import create_react_agent
@@ -19,6 +18,8 @@ from langchain_core.tools import tool
 from langmem.short_term import SummarizationNode
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain_core.messages import AIMessage
+import json
 
 class ChatBotV2Repository:
     def __init__(
@@ -50,6 +51,7 @@ class ChatBotV2Repository:
 
         chatbot.add_node("summarize_conversation", self.__summarization_node())
         chatbot.add_node("memory_update", self.__memory_update_node)
+        chatbot.add_node("store_response", self.__store_response)
 
         chatbot.add_conditional_edges("llm_router", self.__llm_router)
         chatbot.add_conditional_edges("initial_summary", self.__should_refine)
@@ -58,7 +60,8 @@ class ChatBotV2Repository:
         chatbot.add_edges("specific_assistance", "memory_update")
         chatbot.add_edges("sql_assistant", "chart_generator")
         chatbot.add_edges("chart_generator", "memory_update")
-        chatbot.add_edges("memory_update", END)
+        chatbot.add_edges("memory_update", "store_response")
+        chatbot.add_edges("store_response", END)
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
         g = compiled_graph.get_graph().draw_mermaid_png()
         with open("chatbot_v2.png", "w+b") as f:
@@ -218,8 +221,8 @@ class ChatBotV2Repository:
         has_docs = len(state.get("document_from_user", [])) > 0
         return "initial_summary" if has_docs else "llm_router"
 
-    def __should_refine(self, state: StateV2) -> Literal["summary_refinement", END]:
-        return "summary_refinement" if state.get("document_idx") < len(state.get("document_from_user")) else END
+    def __should_refine(self, state: StateV2) -> Literal["summary_refinement", "store_response"]:
+        return "summary_refinement" if state.get("document_idx") < len(state.get("document_from_user")) else "store_response"
 
     def __create_initial_summary_chain(self):
         prompt = ChatPromptTemplate(
@@ -562,3 +565,24 @@ class ChatBotV2Repository:
         chartData: ChartData = chart
         agent_answer.chart = chartData
         return {"agent_answer": agent_answer}
+
+    def __store_response(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        agent_answer = state.get("agent_answer")
+        return {"messages": [AIMessage(content=agent_answer.model_dump_json())]}
+
+
+    @staticmethod
+    def get_chat_history_v2(config: RunnableConfig, compiled_graph: CompiledStateGraph) -> List[ConversationStateV2]:
+        """Return list of ConversationState objects for external rendering."""
+        conversation_list: List[ConversationStateV2] = []
+        conv_state = compiled_graph.get_state(config).values.get("messages") or []
+        for idx, msg in enumerate(conv_state, start=1):
+            if idx % 2:  # odd = question
+                conv = ConversationStateV2()
+                conv.question = msg.content
+            else:  # even = answer
+                agent_response: AgentResponseV2 = AgentResponseV2.model_validate_json(msg.content)
+                conv.answer = agent_response
+                conversation_list.append(conv)
+        return conversation_list
+

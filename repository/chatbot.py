@@ -3,7 +3,7 @@ import re
 import logging
 import os
 
-from entity.conversation import ConversationalChatbot, State, ConversationState
+from entity.conversation import ConversationalChatbot, State, ConversationState, ConversationStateV2   
 from infra.data_store import PostgresAdapter
 from infra.generative_provider import GenerativeAdapter
 from langchain_core.prompts import ChatPromptTemplate

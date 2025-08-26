@@ -92,6 +92,15 @@ class ConversationUsecase:
             chatbot = self.chatbot_repository.create_chatbot(conversation.conversation_uuid)
             self.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
         return self.chatbot_repository.get_chat_history(config, chatbot)
+
+    def get_chat_history_v2(self, conversation: Conversation):
+        config = {"configurable": {"thread_id": conversation.conversation_uuid}}
+        chatbot = self.__chatbotv2_repository.get_chatbot_v2(conversation.conversation_uuid)
+        if chatbot is None:
+            self.logger.info("conversation for {} id is not found".format(conversation.conversation_uuid))
+            chatbot = self.__chatbotv2_repository.create_chatbot_v2(conversation.conversation_uuid)
+            self.logger.info("conversation for {} id is created".format(conversation.conversation_uuid))
+        return self.__chatbotv2_repository.get_chat_history_v2(config, chatbot)
     
                                                                                                                                                                                                         
     def list_conversations(self, conversation_filter: Conversation) -> List[Conversation]:

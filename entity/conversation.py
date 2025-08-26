@@ -112,3 +112,6 @@ class StateV2(MessagesState):
     database_config: List[DatabaseConfig]
     db_name: str
 
+class ConversationStateV2(BaseModel):
+    question: str | None = ""
+    answer: AgentResponseV2 | None = None
