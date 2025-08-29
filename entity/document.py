@@ -3,6 +3,7 @@ from error.error import UnknownFileType
 from time import time
 from pydantic import BaseModel
 from fastapi import UploadFile as FileStorage
+from typing import List, Dict
 
 class DocumentRequest(BaseModel):
     uuid: str | None
@@ -57,3 +58,23 @@ class Chat(object):
     def set_multinancy_attr(self, project_uuid: str, tenant_id: str):
         self.project_uuid = project_uuid
         self.tenant_id = tenant_id
+
+
+class UploadXAIFile(BaseModel):
+    tenant_id: str
+    project_uuid: str
+    file: FileStorage
+
+class FeatureImpact(BaseModel):
+    name: str
+    mean_value: float
+
+class ShapSummary(BaseModel):
+    file_name: str
+    prediction_distribution: Dict[str, int]
+    top_positive: List[FeatureImpact]
+    top_negative: List[FeatureImpact]
+
+class XAIFileSummary(BaseModel):
+    summary: str
+    source: str

@@ -18,6 +18,8 @@ from langchain_community.agent_toolkits import create_sql_agent
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from sqlalchemy import create_engine, text
 
+from entity.document import ShapSummary, XAIFileSummary
+
 
 def _is_speech_request(text: str) -> bool:
     """Very lightweight detector for 'write a presidential speech' prompts."""
@@ -870,6 +872,47 @@ class ChatBotRepository:
                 conversation_list.append(conv)
         return conversation_list
 
+    def upload_xai_file(self, shap_summary: ShapSummary):
+        prompt = ChatPromptTemplate.from_template(
+            """
+                You are given a dataset of SHAP values that explain an AI model's predictions. The dataset includes:
+
+                - Number of rows (total predictions)
+
+                - Number of features (factors considered by the model)
+
+                - Distribution of predictions (e.g., Approved, Need Revision, Rejected)
+
+                - Top features with their importance values
+
+                Your task: Create a plain-language summary report for non-technical readers.
+                The report should include: 
+
+                - Introduction: Briefly describe what the AI model is predicting.
+
+                - Prediction Results: Show how many items fall into each prediction category, in simple terms.
+
+                - Key Influencing Factors: List the top factors that most influence the AI's decisions, explained in everyday language (e.g., “Project Cost” instead of “shap_cost_midr”).
+
+                - Interpretation: Explain what these results mean in practical terms — what levers matter most, whether the model is balanced, and any high-level takeaways.
+
+                - Tone: Write in a clear, neutral, and business-friendly style. Avoid technical jargon.
+
+                The dataset is as follows:
+                {shap_summary}
+
+                The output should be in the following format:
+                {{
+                    "summary": "summary of the dataset",
+                    "source": "source of the dataset"
+                }}
+
+                Answer in Bahasa Indonesia
+            """
+        )
+        chain = prompt | self.generative_adapter.chat_model.with_structured_output(XAIFileSummary)
+        response = chain.invoke({"shap_summary": shap_summary.model_dump_json()})
+        return response
 
 # Example usage and configuration
 def create_chatbot_with_sql_support(

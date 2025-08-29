@@ -3,7 +3,7 @@ from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
 from usecase.user import UserUsecase
 from entity.user import LoginRequest, UserAccessTokenRequest, UserAccessTokenResponse
-from entity.document import Document, DocumentDb, DocumentRequest
+from entity.document import Document, DocumentDb, DocumentRequest, UploadXAIFile
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState, ConversationStateV2
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge, UnauthorizedAccess
@@ -446,6 +446,32 @@ class Routes:
             # except Exception as e:
             #     self.logger.error(str(e))
             #     raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+
+        @self.app.post("/v1/xai")
+        async def upload_file_xai(
+            request: Request,
+            tenant_id: Annotated[str, Header()],
+            project_uuid: Annotated[str, Header()],
+            file: UploadFile,
+        ):
+            try:
+                if tenant_id is "":
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tenant-Id is required")
+                if project_uuid is "":
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project-UUID is required")
+                upload_xai_file = UploadXAIFile(tenant_id=tenant_id, project_uuid=project_uuid, file=file)
+                response = await self.conversation_usecase.upload_xai_file(upload_xai_file)
+                return JSONResponse(content=response.model_dump(), status_code=status.HTTP_200_OK)
+            except UnknownFileType as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+            except DatabaseError as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+
 
         @self.app.get("/")
         def index():
