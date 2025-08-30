@@ -134,7 +134,7 @@ class ConversationUsecase:
             "configurable": {
                 "thread_id": conversation.conversation_uuid,
             },
-            "recursion_limit": 25 if conversation.document_from_user.__len__() == 0 else len(conversation.document_from_user) * 2
+            "recursion_limit": max(25, conversation.document_from_user.__len__() * 2)
         }
         response = chatbot.invoke(
             input={
