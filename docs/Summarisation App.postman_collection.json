@@ -16,12 +16,12 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:5000/v1/projects",
+							"raw": "http://localhost:8000/v1/projects",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "5000",
+							"port": "8000",
 							"path": [
 								"v1",
 								"projects"
@@ -37,7 +37,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\": \"audit\"\n}",
+							"raw": "{\n    \"name\": \"Testing Project - Multitenancy (2)\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -45,12 +45,12 @@
 							}
 						},
 						"url": {
-							"raw": "http://localhost:5000/v1/projects",
+							"raw": "http://localhost:8000/v1/projects",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "5000",
+							"port": "8000",
 							"path": [
 								"v1",
 								"projects"
@@ -72,7 +72,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"uuid\": \"b60a66cb-bccb-51c8-8a73-a371a4683dbd\"\n}",
+							"raw": "{\n    \"uuid\": \"e316ec19-eed1-52c3-9ae4-1fa72707ad87\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -80,12 +80,12 @@
 							}
 						},
 						"url": {
-							"raw": "http://localhost:5000/v1/projects",
+							"raw": "http://localhost:8000/v1/projects",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "5000",
+							"port": "8000",
 							"path": [
 								"v1",
 								"projects"
@@ -112,7 +112,7 @@
 						{
 							"key": "document",
 							"type": "file",
-							"src": "/home/ekky-kharismadhany/Downloads/Juklak installasi Firmware Device IOT GB.pdf"
+							"src": "/home/ekky-kharismadhany/Downloads/01. Salinan PB 1 Tahun 2024.pdf"
 						},
 						{
 							"key": "project",
@@ -183,20 +183,17 @@
 		{
 			"name": "Chat",
 			"request": {
-				"auth": {
-					"type": "noauth"
-				},
 				"method": "POST",
 				"header": [
 					{
 						"key": "Tenant-Id",
-						"value": "external-audit",
+						"value": "internal-audit",
 						"type": "text"
 					}
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"chat\": \"Ringkas dokumen petunjuk lapangan install IOT versi golden\",\n    \"project_uuid\": \"14e323af-3895-5435-ade2-f9328e0a890c\",\n    \"is_stream\": \"true\"\n}",
+					"raw": "{\n    \"chat\": \"Jelaskan bagaimana prosedur instalasi IoT golden?\",\n    \"project_uuid\": \"14e323af-3895-5435-ade2-f9328e0a890c\",\n    \"is_stream\": \"true\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -204,12 +201,12 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:5000/v1/chat",
+					"raw": "http://localhost:8000/v1/chat",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "5000",
+					"port": "8000",
 					"path": [
 						"v1",
 						"chat"
@@ -225,18 +222,15 @@
 				"header": [
 					{
 						"key": "Tenant-Id",
-						"value": "internal-audit",
+						"value": "production-user-1",
 						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "http://localhost:5000/v1/documents",
+					"raw": "http:///localhost:8000/v1/documents",
 					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "5000",
 					"path": [
+						"localhost:8000",
 						"v1",
 						"documents"
 					]
@@ -298,7 +292,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"uuid\": \"b60a66cb-bccb-51c8-8a73-a371a4683dbd\",\n    \"project_uuid\": \"14e323af-3895-5435-ade2-f9328e0a890c\"\n}",
+					"raw": "{\n    \"uuid\": \"e714a759-3233-5f3e-949d-7cdc47350fdc\",\n    \"project_uuid\": \"14e323af-3895-5435-ade2-f9328e0a890c\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -319,6 +313,353 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Conversation",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "production-user-1",
+						"type": "text"
+					},
+					{
+						"key": "Api-Key",
+						"value": "$2b$12$K.FzVBslq6.SwkuhAGFTY.pV8RJ6w7V5.YT2/.0NuduX1vQiqamcK",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "project_uuid",
+							"value": "d648f9e1-9618-58ca-ba54-30d38591c41b",
+							"type": "text"
+						},
+						{
+							"key": "message",
+							"value": "Siapa namaku?",
+							"type": "text"
+						},
+						{
+							"key": "conversation_uuid",
+							"value": "b0dce2a9-a6fa-4267-9959-b0790fe05ba9",
+							"type": "text"
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": "/home/ekky-kharismadhany/Downloads/Promotion Deck - Ekky Kharismadhany.pdf",
+							"disabled": true
+						},
+						{
+							"key": "is_stream",
+							"value": "true",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8000/v1/conversation",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"v1",
+						"conversation"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Chat History",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2huZG9lIiwiaXNzIjoiZG9jdW1lbnQtc3VtbWFyeS1hcHAiLCJpYXQiOjE3NTYwNTIxMjEsImV4cCI6MTc1NjEzODUyMX0.3fGA3rtNA5UHaKr57BRwpyx7QKMuVpx6Rw_ucBWhqX0",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Tenant-Id",
+						"value": "internal-audit",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://localhost:8000/v1/conversation/:conversation_uuid",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"v1",
+						"conversation",
+						":conversation_uuid"
+					],
+					"variable": [
+						{
+							"key": "conversation_uuid",
+							"value": "b0dce2a9-a6fa-4267-9959-b0790fe05bag"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "User Login",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "accept",
+						"value": "application/json"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"johndoe\",\n  \"password\": \"password\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8000/v1/login",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8000",
+					"path": [
+						"v1",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get API Key",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2huZG9lIiwiaXNzIjoiZG9jdW1lbnQtc3VtbWFyeS1hcHAiLCJpYXQiOjE3NTU0MjMyOTYsImV4cCI6MTc1NTUwOTY5Nn0.dmiEQc0nyOYFIzARue4di0lXCZel-mDeNwhG9c78Pfk",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "accept",
+						"value": "application/json"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"demo key\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/v1/user/access-token",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"v1",
+						"user",
+						"access-token"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Internal Conversation",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Api-Key",
+						"value": "$2b$12$0sfbNhgMakPC4.S5hJyYx.qW0Vozwsgpzc12PvKZ4Rd98tYtMlILC",
+						"type": "text"
+					},
+					{
+						"key": "Username",
+						"value": "johndoe",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "project_id",
+							"value": "14e323af-3895-5435-ade2-f9328e0a890b",
+							"type": "text"
+						},
+						{
+							"key": "conversation_uuid",
+							"value": "b0dce2a9-a6fa-4267-9959-b0790fe05bag",
+							"type": "text"
+						},
+						{
+							"key": "message",
+							"value": "Dimana saya tinggal?",
+							"type": "text"
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": "/C:/Users/Ekky Kharismadhany/Downloads/Q1-2024.pdf",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8000/v1/internal/conversation",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"v1",
+						"internal",
+						"conversation"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Internal Conversation V2",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Api-Key",
+						"value": "$2b$12$0sfbNhgMakPC4.S5hJyYx.qW0Vozwsgpzc12PvKZ4Rd98tYtMlILC",
+						"type": "text"
+					},
+					{
+						"key": "Username",
+						"value": "johndoe",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "project_id",
+							"value": "14e323af-3895-5435-ade2-f9328e0a890b",
+							"type": "text"
+						},
+						{
+							"key": "conversation_uuid",
+							"value": "c0dce2a9-a6fa-4267-9959-b0790fe05bap",
+							"type": "text"
+						},
+						{
+							"key": "message",
+							"value": "What is go progamming language?",
+							"type": "text"
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": "/D:/Saham/POWR/Investor Presentation 1H 2025.pdf",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8000/v2/internal/conversation",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"v2",
+						"internal",
+						"conversation"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2huZG9lIiwiaXNzIjoiZG9jdW1lbnQtc3VtbWFyeS1hcHAiLCJpYXQiOjE3NTU0MjMyOTYsImV4cCI6MTc1NTUwOTY5Nn0.dmiEQc0nyOYFIzARue4di0lXCZel-mDeNwhG9c78Pfk",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
 		}
 	]
 }
