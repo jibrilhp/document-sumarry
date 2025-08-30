@@ -48,3 +48,15 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
 -- 26072025: `documents` table no longer needs to assure consistency with `projects` table as it already validated on downstream application
 ALTER TABLE public.documents DROP CONSTRAINT documents_projects_uuid_fkey;
+
+-- 26072025: Add column_metadata to datasets table
+ALTER TABLE public.datasets ADD column_metadata text NULL;
+
+
+CREATE TABLE IF NOT EXISTS xai_files (
+    uuid VARCHAR PRIMARY KEY,
+    file_path VARCHAR,
+    explanation TEXT,
+    project_uuid VARCHAR,
+    user_id VARCHAR
+);

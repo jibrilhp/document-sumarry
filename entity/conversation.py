@@ -81,6 +81,7 @@ class DatabaseConfig(BaseModel):
     db_password: str
     table_name: str
     db_uri: Optional[str] = ""
+    column_metadata: Optional[str] = ""
 
     def set_db_uri(self) -> str:
         if self.db_type == "postgresql":
@@ -95,6 +96,9 @@ class DatabaseConfig(BaseModel):
 class StateV2(MessagesState):
     # Conversation memory
     summarized_messages: List[AnyMessage]
+    conversation_memory: str
+    memory_retrieved: bool
+    memory_updated: bool
     # Agent related
     router_output: str
     question: str
@@ -107,3 +111,6 @@ class StateV2(MessagesState):
     database_config: List[DatabaseConfig]
     db_name: str
 
+class ConversationStateV2(BaseModel):
+    question: str | None = ""
+    answer: AgentResponseV2 | None = None

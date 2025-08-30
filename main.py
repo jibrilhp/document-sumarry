@@ -56,7 +56,7 @@ chatbotv2_repository = ChatBotV2Repository(postgres_adapter=postgres_adapter, ge
 client_db_repository = ClientDatabaseRepository(db=postgres_adapter)
 document_usecase = DocumentUsecase(document_repository=documentRepository, storage_repository=storage_repository, ollama_adapter=generative_adapter)
 project_usecase = ProjectUsecase(project_repository=project_repository)
-conversation_usecase = ConversationUsecase(ollama_adapter=generative_adapter, chatbot_repository=chatbot_repository, document_repository=documentRepository, chatbotv2_repository=chatbotv2_repository, client_db_repository=client_db_repository)
+conversation_usecase = ConversationUsecase(chatbot_repository=chatbot_repository, document_repository=documentRepository, chatbotv2_repository=chatbotv2_repository, client_db_repository=client_db_repository)
 user_usecase = UserUsecase(user_repository=user_repository, setting=settings)
 routes = Routes(app=router, document_usecase=document_usecase, project_usecase=project_usecase, conversation_usecase=conversation_usecase, settings=settings, user_usecase=user_usecase)
 app.add_middleware(AuthMiddleware, settings=settings)

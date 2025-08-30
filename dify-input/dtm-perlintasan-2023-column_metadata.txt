@@ -1,0 +1,81 @@
+
+Kolom: id
+Deskripsi Kolom: Identitas unik (UUID) untuk setiap catatan perlintasan
+
+Kolom: tahun_perlintasan
+Deskripsi Kolom: Tahun terjadinya perlintasan
+
+Kolom: bulan_perlintasan
+Deskripsi Kolom: Bulan terjadinya perlintasan (1–12)
+
+Kolom: tanggal_perlintasan
+Deskripsi Kolom: Tanggal dan waktu pasti perlintasan
+
+Kolom: kode_pulau
+Deskripsi Kolom: Kode pulau tempat perlintasan terjadi
+
+Kolom: nama_pulau
+Deskripsi Kolom: Nama pulau tempat perlintasan terjadi
+
+Kolom: iso_codes
+Deskripsi Kolom: Kode ISO terkait lokasi (provinsi atau negara)
+
+Kolom: provinsi
+Deskripsi Kolom: Nama provinsi lokasi Tempat Pemeriksaan Imigrasi (TPI)
+
+Kolom: nama_induk_satuan_kerja
+Deskripsi Kolom: Nama induk satuan kerja yang membawahi TPI
+
+Kolom: kode_tpi
+Deskripsi Kolom: Kode Tempat Pemeriksaan Imigrasi (TPI)
+
+Kolom: kode_lokasi
+Deskripsi Kolom: Kode lokal lokasi TPI
+
+Kolom: nama_tpi
+Deskripsi Kolom: Nama Tempat Pemeriksaan Imigrasi (TPI)
+
+Kolom: jenis_tpi
+Deskripsi Kolom: Jenis TPI (misal: bandara, pelabuhan laut, perbatasan darat)
+
+Kolom: kode_kewarganegaraan
+Deskripsi Kolom: Kode kewarganegaraan pelintas
+
+Kolom: kewarganegaraan
+Deskripsi Kolom: Kewarganegaraan pelintas dalam bentuk teks
+
+Kolom: arah_perlintasan
+Deskripsi Kolom: Arah perlintasan (misal: masuk atau keluar)
+
+Kolom: status_perlintasan
+Deskripsi Kolom: Status perlintasan (misal: resmi, sementara, ilegal)
+
+Kolom: kode_jenis_dokumen_perjalanan
+Deskripsi Kolom: Kode jenis dokumen perjalanan
+
+Kolom: jenis_dokumen_perjalanan
+Deskripsi Kolom: Jenis dokumen perjalanan (misal: paspor, surat perjalanan)
+
+Kolom: kode_jenis_visa
+Deskripsi Kolom: Kode jenis visa yang digunakan
+
+Kolom: deskripsi_jenis_visa
+Deskripsi Kolom: Deskripsi jenis visa
+
+Kolom: kode_tpi_luar_negeri
+Deskripsi Kolom: Kode TPI luar negeri (jika perlintasan internasional)
+
+Kolom: tpi_luar_negeri
+Deskripsi Kolom: Nama TPI luar negeri
+
+Kolom: kode_negara_tpi_luar_negeri
+Deskripsi Kolom: Kode negara TPI luar negeri
+
+Kolom: kelompok_umur
+Deskripsi Kolom: Kelompok umur pelintas (misal: anak-anak, dewasa, lansia)
+
+Kolom: jumlah
+Deskripsi Kolom: Jumlah pelintas yang tercatat (data agregat)
+
+Kolom: last_update
+Deskripsi Kolom: Waktu terakhir data diperbarui
