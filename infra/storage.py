@@ -25,12 +25,14 @@ class StorageRepository:
         file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
         logging.info(f"load pdf from {file_path}")
         reader = PdfReader(file_path)
-        extracted_text: str = ""
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=50_000, chunk_overlap=1_000)
         metadatas: List[dict] = list()
+        extracted_text: str = ""
         for page in reader.pages:
             extracted_text += self.clean_text(page.extract_text())
             metadatas.append({"tenant_id": document.tenant_id, "project_uuid": document.project_uuid, "document_name": document.document_name})
+        chunk_size, overlap = self.dynamic_split_text(extracted_text)
+        logging.info(f"Text length: {len(extracted_text)}, Chunk size: {chunk_size}, Overlap: {overlap}")
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap, separators=["\n\n", "\n", "."])
         splitted_texts = text_splitter.split_text(extracted_text)
         documents = text_splitter.create_documents(splitted_texts, metadatas)
         return documents
@@ -38,6 +40,12 @@ class StorageRepository:
     def clean_text(self, text: str):
         text = re.sub(r'\s+', ' ', text).strip()
         return text
+
+    def dynamic_split_text(self, text: str, target_chunk: int = 10, min_size: int = 500, max_size: int = 5000, overlap_ratio: float = 0.1, min_overlap=100, max_overlap=500):
+        doc_length = len(text)
+        chunk_size = max(min_size, min(max_size, doc_length // target_chunk or min_size))
+        overlap = max(min_overlap, min(max_overlap, int(chunk_size * overlap_ratio)))
+        return chunk_size, overlap
 
     def load_image_with_langchain(self, image_db: DocumentDb) -> List[LangchainDocument]:
         image = open_image(f"{self.__FILE_PATH__}/{image_db.project_uuid}/{image_db.document_name}")
