@@ -176,7 +176,7 @@ class ChatBotV2Repository:
         """
         
         react_agent = create_react_agent(
-            debug=False,            
+            debug=True,            
             response_format=AgentResponseV2,
             model=self.__generative_adapter.chat_model, 
             tools=[self.get_vector_search_tool(), self.__tavily_search_tools(), self.__tavily_extract_tool()],
@@ -219,10 +219,24 @@ class ChatBotV2Repository:
 
     def __should_summarize(self, state: StateV2) -> Literal["llm_router", "initial_summary"]:
         has_docs = len(state.get("document_from_user", [])) > 0
+        self.__logger.info(f"=== SHOULD SUMMARIZE DEBUG ===")
+        self.__logger.info(f"Has documents: {has_docs}")
+        self.__logger.info(f"Document count: {len(state.get('document_from_user', []))}")
+        self.__logger.info(f"Routing to: {'initial_summary' if has_docs else 'llm_router'}")
         return "initial_summary" if has_docs else "llm_router"
 
     def __should_refine(self, state: StateV2) -> Literal["summary_refinement", "store_response"]:
-        return "summary_refinement" if state.get("document_idx") < len(state.get("document_from_user")) else "store_response"
+        current_idx = state.get("document_idx", 0)
+        total_docs = len(state.get("document_from_user", []))
+        should_refine = current_idx < total_docs
+        
+        self.__logger.info(f"=== SHOULD REFINE DEBUG ===")
+        self.__logger.info(f"Current document index: {current_idx}")
+        self.__logger.info(f"Total documents: {total_docs}")
+        self.__logger.info(f"Should refine: {should_refine}")
+        self.__logger.info(f"Routing to: {'summary_refinement' if should_refine else 'store_response'}")
+        
+        return "summary_refinement" if should_refine else "store_response"
 
     def __create_initial_summary_chain(self):
         prompt = ChatPromptTemplate(
@@ -234,7 +248,7 @@ class ChatBotV2Repository:
 
                     ### Perintah ringkasan
                     1. Maksimum 120 kata, bahasa sama dengan dokumen.
-                    2. Gunakan poin‑poin (•) untuk fakta kunci.
+                    2. Gunakan poin - poin (•) untuk fakta kunci.
                     3. Tutup dengan "👉 Ringkasan selesai".
 
                     {context}""",
@@ -244,12 +258,39 @@ class ChatBotV2Repository:
         return prompt | self.__generative_adapter.chat_model.with_structured_output(AgentResponseV2)
     
     def __generate_initial_summary(self, state: StateV2, config: RunnableConfig) -> StateV2:
-        answer = self.__create_initial_summary_chain().invoke(
-            input=state["document_from_user"][0],
-            config=config,
-        )
-        answer.references.add(state["document_from_user"][0].metadata["document_name"])
-        return {"agent_answer": answer, "document_idx": 1}
+        try:
+            self.__logger.info("=== INITIAL SUMMARY DEBUG ===")
+            self.__logger.info(f"Document content length: {len(state['document_from_user'][0].page_content)}")
+            self.__logger.info(f"Document metadata: {state['document_from_user'][0].metadata}")
+            self.__logger.info(f"Config: {config}")
+            
+            # Log the first 200 chars of document content
+            doc_preview = state['document_from_user'][0].page_content[:200]
+            self.__logger.info(f"Document preview: {doc_preview}...")
+            
+            answer = self.__create_initial_summary_chain().invoke(
+                input={
+                    "context": state["document_from_user"][0].page_content,
+                },
+                config=config,
+            )
+            
+            self.__logger.info(f"Raw LLM response: {answer}")
+            self.__logger.info(f"Answer length: {len(answer.answer) if hasattr(answer, 'answer') else 'No answer field'}")
+            self.__logger.info(f"Answer content: {answer.answer[:300] if hasattr(answer, 'answer') else 'No answer field'}...")
+            
+            # Check for truncation patterns
+            if hasattr(answer, 'answer') and answer.answer:
+                if answer.answer.strip() in ["Berikut adalah ringkasan dari dokumen yang diberikan:", "Berikut adalah analisis", "Berdasarkan informasi yang tersedia"]:
+                    self.__logger.warning("DETECTED TRUNCATION PATTERN in initial summary!")
+                    self.__logger.warning(f"Truncated answer: '{answer.answer}'")
+            
+            answer.references.add(state["document_from_user"][0].metadata["document_name"])
+            return {"agent_answer": answer, "document_idx": 1}
+            
+        except Exception as e:
+            self.__logger.error(f"Error in initial summary generation: {e}")
+            raise
     
     def __create_summary_refinement_chain(self):
         prompt = ChatPromptTemplate(
@@ -277,18 +318,51 @@ class ChatBotV2Repository:
     
 
     def __generate_summary_refinement(self, state: StateV2, config: RunnableConfig) -> StateV2:
-        refined = self.__create_summary_refinement_chain().invoke(
-            {
-                "existing_answer": state["agent_answer"].answer,
-                "context": state["document_from_user"][state["document_idx"]],
-            },
-            config=config,
-        )
-        refined.references.add(state["document_from_user"][state["document_idx"]].metadata["document_name"])
-        return {"agent_answer": refined, "document_idx": state["document_idx"] + 1}
+        try:
+            self.__logger.info("=== SUMMARY REFINEMENT DEBUG ===")
+            self.__logger.info(f"Current document index: {state['document_idx']}")
+            self.__logger.info(f"Total documents: {len(state['document_from_user'])}")
+            self.__logger.info(f"Existing answer length: {len(state['agent_answer'].answer) if hasattr(state['agent_answer'], 'answer') else 'No answer field'}")
+            self.__logger.info(f"Existing answer: {state['agent_answer'].answer[:200] if hasattr(state['agent_answer'], 'answer') else 'No answer field'}...")
+            
+            current_doc = state['document_from_user'][state['document_idx']]
+            self.__logger.info(f"Current document content length: {len(current_doc.page_content)}")
+            self.__logger.info(f"Current document metadata: {current_doc.metadata}")
+            
+            # Log the first 200 chars of current document content
+            doc_preview = current_doc.page_content[:200]
+            self.__logger.info(f"Current document preview: {doc_preview}...")
+            
+            refined = self.__create_summary_refinement_chain().invoke(
+                {
+                    "existing_answer": state["agent_answer"].answer,
+                    "context": current_doc,
+                },
+                config=config,
+            )
+            
+            self.__logger.info(f"Raw refined response: {refined}")
+            self.__logger.info(f"Refined answer length: {len(refined.answer) if hasattr(refined, 'answer') else 'No answer field'}")
+            self.__logger.info(f"Refined answer content: {refined.answer[:300] if hasattr(refined, 'answer') else 'No answer field'}...")
+            
+            # Check for truncation patterns
+            if hasattr(refined, 'answer') and refined.answer:
+                if refined.answer.strip() in ["Berikut adalah ringkasan dari dokumen yang diberikan:", "Berikut adalah analisis", "Berdasarkan informasi yang tersedia"]:
+                    self.__logger.warning("DETECTED TRUNCATION PATTERN in summary refinement!")
+                    self.__logger.warning(f"Truncated refined answer: '{refined.answer}'")
+            
+            refined.references.add(current_doc.metadata["document_name"])
+            return {"agent_answer": refined, "document_idx": state["document_idx"] + 1}
+            
+        except Exception as e:
+            self.__logger.error(f"Error in summary refinement: {e}")
+            raise
 
 
     def __summarization_node(self) -> SummarizationNode:
+        self.__logger.info("=== SUMMARIZATION NODE CREATED ===")
+        self.__logger.info(f"Model: {self.__generative_adapter.chat_model}")
+        self.__logger.info(f"Max tokens: 512")
         return SummarizationNode(
             model=self.__generative_adapter.chat_model,
             max_tokens=512,
@@ -425,10 +499,6 @@ class ChatBotV2Repository:
             Conversation Context: {conversation_memory}
 
             Important: You must fill *all relevant fields* of the AgentResponseV2 schema.
-            Do not omit "chart" when data is visualizable.
-            
-            Important: "chart_spec" must be a valid JSON string. 
-            Do not enclose it in quotes. Output raw JSON for the chart_spec field.
 
             Given an input question:
             1. Consider the conversation context to understand what the user is asking about
@@ -443,18 +513,18 @@ class ChatBotV2Repository:
             - If a query fails, rewrite and retry.
             - DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.).
             - Always check available tables first, then query the schema of the most relevant ones.
-
-            Chart generation guidelines:
-            - When the query returns numerical or categorical data that could benefit from visualization, generate a chart specification.
-            - Use these defaults:
-            - Time-series data → line chart
-            - Categorical comparisons → bar chart
-            - Correlation between two numerical variables → scatter plot
-            - Proportions/percentages → pie chart
-            - Only suggest a chart when data is meaningful and has at least 2 data points.
-            - Always include the raw query results in the response.
+            - Limit your iteration to as minimal as possible when querying.
 
             You MUST always return output that conforms to the AgentResponseV2 schema.
+
+            Output guidelines:
+            - *Always return exact number as you get from the SQL query.*
+
+            Table information:
+            {db.get_table_info()}
+
+            Usable table names:
+            {db.get_usable_table_names()}
 
             Column Metadata:
             {column_metadata}
@@ -462,16 +532,10 @@ class ChatBotV2Repository:
             - "answer": natural language explanation
             - "references": set of URLs (empty if none)
             - "needs_clarification": boolean
-            - "chart": 
-            - If data is visualizable, always fill with:
-                - "data": SQL rows
-                - "chart_spec": valid Vega-Lite v5 spec
-            - If not visualizable, return null
-
-            Do not place "data" and "chart_spec" at the top level. They must always be inside "chart".
+            - "chart": null
         """
         react_agent = create_react_agent(
-            debug=False,            
+            debug=True,            
             response_format=AgentResponseV2,
             model=self.__generative_adapter.chat_model, 
             tools=toolkit.get_tools(),
@@ -527,32 +591,33 @@ class ChatBotV2Repository:
     def __chart_chain(self) -> Runnable:
         prompt = ChatPromptTemplate.from_template("""
             You are a chart generator.  
-            Given only the natural language answer from the database query, generate a valid Vega-Lite v5 chart specification.  
+            Given only the natural language answer from the database query, generate a valid Vega-Lite v5 chart specification.
 
-            RULES:  
-            - Always return a JSON object with the following schema:
-            {{
-            "chart": {{
-                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                "data": {{"values": [ ... ]}},
-                "mark": "bar"
-            }}
-            }}
-
-            Always return `chart_spec` as a valid JSON object (not a string).
-            Do not wrap the chart specification in quotes.
-
-            - Parse the entities and numbers from the answer into "data.values".
-            - Select chart type:
-            - categorical comparisons → "mark": "bar"
-            - time series (date, year, month) → "mark": "line"
-            - two quantitative variables → "mark": "point"
-            - proportions/percentages → "mark": "arc"
-            - Use meaningful axis titles from the answer.
-            - Do not include explanations or extra text, only the JSON.  
-
-            ANSWER:  
+            Input:
             {answer}
+
+            Processing guidelines:
+            - read the answer carefully and understand the data
+            - generate a valid Vega-Lite v5 chart specification based on the answer
+
+            CRITICAL RULES:
+            - Return ONLY a valid JSON object with this exact structure:
+            {{
+                "chart": {{
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {{
+                        "values": [
+                            {{"field1": "value1", "field2": number1}},
+                            {{"field1": "value2", "field2": number2}}
+                        ]
+                    }},
+                    "mark": "chart_type",
+                    "encoding": {{
+                        "x": {{"field": "field1", "type": "nominal", "axis": {{"title": "X Axis Title"}}}},
+                        "y": {{"field": "field2", "type": "quantitative", "axis": {{"title": "Y Axis Title"}}}}
+                    }}
+                }}
+            }}
         """)
         return prompt | self.__generative_adapter.chat_model.with_structured_output(ChartData)
     
@@ -567,8 +632,35 @@ class ChatBotV2Repository:
         return {"agent_answer": agent_answer}
 
     def __store_response(self, state: StateV2, config: RunnableConfig) -> StateV2:
-        agent_answer = state.get("agent_answer")
-        return {"messages": [AIMessage(content=agent_answer.model_dump_json())]}
+        try:
+            self.__logger.info("=== STORE RESPONSE DEBUG ===")
+            agent_answer = state.get("agent_answer")
+            
+            if agent_answer:
+                self.__logger.info(f"Agent answer type: {type(agent_answer)}")
+                self.__logger.info(f"Agent answer: {agent_answer}")
+                
+                if hasattr(agent_answer, 'answer'):
+                    self.__logger.info(f"Final answer length: {len(agent_answer.answer)}")
+                    self.__logger.info(f"Final answer content: {agent_answer.answer}")
+                    
+                    # Check for truncation patterns in final output
+                    if agent_answer.answer.strip() in ["Berikut adalah ringkasan dari dokumen yang diberikan:", "Berikut adalah analisis", "Berdasarkan informasi yang tersedia"]:
+                        self.__logger.error("FINAL TRUNCATION DETECTED in store_response!")
+                        self.__logger.error(f"Truncated final answer: '{agent_answer.answer}'")
+                
+                # Log the JSON that will be stored
+                json_content = agent_answer.model_dump_json()
+                self.__logger.info(f"JSON content length: {len(json_content)}")
+                self.__logger.info(f"JSON content: {json_content}")
+            else:
+                self.__logger.warning("No agent_answer found in state")
+            
+            return {"messages": [AIMessage(content=agent_answer.model_dump_json())]}
+            
+        except Exception as e:
+            self.__logger.error(f"Error in store_response: {e}")
+            raise
 
 
     @staticmethod

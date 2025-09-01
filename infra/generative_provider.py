@@ -24,7 +24,7 @@ class GenerativeAdapter:
             logging.info(f"using ollama provider with base URL: {settings.OLLAMA_BASE_URL}.  chat model: {settings.CHAT_MODEL_NAME}, embedding model: {settings.EMBEDDING_MODEL_NAME}")
         elif settings.LLM_PROVIDER == "google":
             rate_limiter = InMemoryRateLimiter(
-                requests_per_second=0.5,
+                requests_per_second=0.2,
                 check_every_n_seconds=0.1,
                 max_bucket_size=10,
             )
@@ -32,7 +32,8 @@ class GenerativeAdapter:
             self.chat_model = ChatGoogleGenerativeAI(
                 model=settings.CHAT_MODEL_NAME,
                 rate_limiter=rate_limiter,
-                max_retries=3
+                max_retries=3,
+                temperature=0.0
             )
             logging.info(f"using google generative provider")
         elif settings.LLM_PROVIDER == "ollama_cpu":
