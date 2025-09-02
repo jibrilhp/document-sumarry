@@ -52,7 +52,7 @@ class DocumentUsecase:
             langchain_document = self.storage_repository.load_csv_document_with_langchain(document=document_from_db)
             self.logger.info("csv loaded with langchain, length {}".format(len(langchain_document)))
         elif document_from_db.document_type == FileType.EXCEL_DOCUMENT.value:
-            langchain_document = self.storage_repository.load_excel_document_with_langchain(document=document_from_db)
+            langchain_document = self.storage_repository.load_xlsx_document_with_langchain(document=document_from_db)
             self.logger.info("excel loaded with langchain, length {}".format(len(langchain_document)))
         
         if langchain_document:

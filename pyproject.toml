@@ -26,4 +26,5 @@ dependencies = [
     "langchain-tavily>=0.2.11",
     "langmem>=0.0.29",
     "pycryptodome>=3.23.0",
+    "openpyxl>=3.1.5",
 ]
