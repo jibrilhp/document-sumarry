@@ -131,13 +131,22 @@ class ChatBotV2Repository:
         
         self.__logger.info(f"Workflow routing - Question: {question}")
         self.__logger.info(f"Workflow routing - Conversation memory: {conversation_memory[:100]}...")
-        
+
+        dataset_name = "" if state.get("database_config") is None or len(state.get("database_config")) == 0 else ", ".join([db.dataset_name for db in state["database_config"]])
+        table_name = "" if state.get("database_config") is None or len(state.get("database_config")) == 0 else ", ".join([db.table_name for db in state["database_config"]])
+        if dataset_name == "" and table_name == "":
+            output: RouterOutputV2 = RouterOutputV2(
+                output_router="specific_assistance",
+                rephrased_question=question.content,
+                table_name=""
+            )
+            return {"router_output": output.output_router, "question": output.rephrased_question, "db_name": output.table_name}
         response = self.__create_workflow_routing_prompt().invoke(
             {
                 "input": question,
                 "conversation_memory": conversation_memory,
-                "dataset_name": ", ".join([db.dataset_name for db in state["database_config"]]),
-                "table_name": ", ".join([db.table_name for db in state["database_config"]])
+                "dataset_name": dataset_name,
+                "table_name": table_name
             },
             config
         )
