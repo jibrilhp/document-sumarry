@@ -405,6 +405,7 @@ class Routes:
             username: Annotated[str | None, Header()] = None,
             files: List[UploadFile] | None = None,
         ):
+            try:
                 if username is None:
                     username = ""
                     self.user_usecase.get_api_key_internal(api_key=api_key)
@@ -431,21 +432,21 @@ class Routes:
                 # request.state.req_token = req_token
                 # request.state.res_token = res_token
                 return response
-            # except UnauthorizedAccess as e:
-            #     self.logger.error(str(e))
-            #     raise HTTPException(status.HTTP_403_FORBIDDEN, "unauthorized access, please provide valid API key")
-            # except ResourceNotFound as e:
-            #     self.logger.error(str(e))
-            #     raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
-            # except FileTooLarge as e:
-            #     self.logger.error(str(e))
-            #     raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(e))
-            # except UnknownFileType as e:
-            #     self.logger.error(str(e))
-            #     raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-            # except Exception as e:
-            #     self.logger.error(str(e))
-            #     raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
+            except UnauthorizedAccess as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "unauthorized access, please provide valid API key")
+            except ResourceNotFound as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+            except FileTooLarge as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(e))
+            except UnknownFileType as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+            except Exception as e:
+                self.logger.error(str(e))
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
         @self.app.post("/v1/xai")
         async def upload_file_xai(

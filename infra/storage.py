@@ -29,11 +29,12 @@ class StorageRepository:
         extracted_text: str = ""
         for page in reader.pages:
             extracted_text += self.clean_text(page.extract_text())
-            metadatas.append({"tenant_id": document.tenant_id, "project_uuid": document.project_uuid, "document_name": document.document_name})
         chunk_size, overlap = self.dynamic_split_text(extracted_text)
         logging.info(f"Text length: {len(extracted_text)}, Chunk size: {chunk_size}, Overlap: {overlap}")
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap, separators=["\n\n", "\n", "."])
         splitted_texts = text_splitter.split_text(extracted_text)
+        for splitted_text in splitted_texts:            
+            metadatas.append({"tenant_id": document.tenant_id, "project_uuid": document.project_uuid, "document_name": document.document_name})
         documents = text_splitter.create_documents(splitted_texts, metadatas)
         return documents
 
