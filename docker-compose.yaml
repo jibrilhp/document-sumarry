@@ -39,7 +39,7 @@ services:
       POSTGRES_PASSWORD: password # Set your PostgreSQL password
       POSTGRES_DB: mydatabase # Set your default database name
     ports:
-      - "54332:5432" # Expose PostgreSQL on port 5432
+      - "127.0.0.1:54332:5432" # Expose PostgreSQL on port 5432
     volumes:
       - pgdata-sql-demo:/var/lib/postgresql/data # Mount volume for data persistence
     networks:
