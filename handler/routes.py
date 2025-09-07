@@ -266,9 +266,16 @@ class Routes:
         @self.app.get("/v2/conversation/{conversation_uuid}")
         async def chat_history_v2(
             tenant_id: Annotated[str | None, Header()],
-            conversation_uuid: str
+            api_key: Annotated[str,  Header()],
+            conversation_uuid: str,
+            username: Annotated[str | None, Header()] = None,
         ) -> List[ConversationStateV2]:
             try:
+                if username is None:
+                    username = ""
+                    self.user_usecase.get_api_key_internal(api_key=api_key)
+                else:
+                    self.user_usecase.get_api_key(username=username, api_key=api_key)
                 conversation = Conversation(tenant_id=tenant_id, conversation_uuid=conversation_uuid)
                 return self.conversation_usecase.get_chat_history_v2(conversation)
             except Exception as e:
