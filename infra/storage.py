@@ -85,6 +85,7 @@ class StorageRepository:
             logging.error(f"Failed to read CSV file at {file_path}: {e}")
             return []
 
+        bundle_row: List[str] = []
         documents: List[LangchainDocument] = []
         for index, row in df.iterrows():
             # Convert each row to a string format. You can customize this part.
@@ -93,7 +94,8 @@ class StorageRepository:
             metadata = {
                 "tenant_id": document.tenant_id,
                 "project_uuid": document.project_uuid,
-                "row_number": index + 1 
+                "row_number": index + 1 ,
+                "document_name": document.document_name
             }
             
             doc = LangchainDocument(page_content=row_content, metadata=metadata)
@@ -126,16 +128,32 @@ class StorageRepository:
             return []
 
         documents: List[LangchainDocument] = []
+        bundle_size = 20
+        bundle_row: List[str] = []
         for index, row in df.iterrows():
             # Convert each row to a string format. You can customize this part.
             row_content = ', '.join(f'{col}: {val}' for col, val in row.astype(str).to_dict().items())
+
+            if index % bundle_size == 0:
+                row_content = '\n'.join(bundle_row)
+                metadata = {
+                    "tenant_id": document.tenant_id,
+                    "project_uuid": document.project_uuid,
+                    "document_name": document.document_name
+                }
+                documents.append(doc)                
+                doc = LangchainDocument(page_content=row_content, metadata=metadata)
+                bundle_row = []
+            else:
+                bundle_row.append(row_content)
             
+        if bundle_row:
+            row_content = '\n'.join(bundle_row)
             metadata = {
                 "tenant_id": document.tenant_id,
                 "project_uuid": document.project_uuid,
-                "row_number": index + 1 
+                "document_name": document.document_name
             }
-            
             doc = LangchainDocument(page_content=row_content, metadata=metadata)
             documents.append(doc)
             
