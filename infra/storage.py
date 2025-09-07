@@ -130,7 +130,8 @@ class StorageRepository:
             """Create a LangchainDocument from the current bundle_rows and append to documents."""
             if not bundle_rows:
                 return
-            page_content = "\n".join(bundle_rows)
+            header_info = f"Columns: {', '.join(df.columns)}\n"
+            page_content = header_info + "\n".join(bundle_rows)
             metadata = {
                 "tenant_id": document.tenant_id,
                 "project_uuid": document.project_uuid,
