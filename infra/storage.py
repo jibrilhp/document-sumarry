@@ -106,20 +106,15 @@ class StorageRepository:
     def load_xlsx_document_with_langchain(self, document: DocumentDb) -> List[LangchainDocument]:
         """
         Loads an XLSX file, processes its content, and returns a list of LangchainDocument objects.
-
-        Each row in the XLSX is treated as a separate document.
-
-        Args:
-            document: A DocumentDb object containing metadata and the path to the XLSX file.
-
-        Returns:
-            A list of LangchainDocument objects, where each object represents a row from the XLSX.
+        Each document bundles up to `bundle_size` rows from the XLSX.
         """
         file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
         logging.info(f"Loading XLSX from {file_path}")
-        
+
         try:
-            df = pd.read_excel(file_path)
+            # Read everything as string to avoid NaNs turning into 'nan' when cast later
+            df = pd.read_excel(file_path, dtype=str)
+            df = df.fillna("")
         except FileNotFoundError:
             logging.error(f"XLSX file not found at {file_path}")
             return []
@@ -129,32 +124,37 @@ class StorageRepository:
 
         documents: List[LangchainDocument] = []
         bundle_size = 20
-        bundle_row: List[str] = []
-        for index, row in df.iterrows():
-            # Convert each row to a string format. You can customize this part.
-            row_content = ', '.join(f'{col}: {val}' for col, val in row.astype(str).to_dict().items())
+        bundle_rows: List[str] = []
 
-            if index % bundle_size == 0:
-                row_content = '\n'.join(bundle_row)
-                metadata = {
-                    "tenant_id": document.tenant_id,
-                    "project_uuid": document.project_uuid,
-                    "document_name": document.document_name
-                }
-                documents.append(doc)                
-                doc = LangchainDocument(page_content=row_content, metadata=metadata)
-                bundle_row = []
-            else:
-                bundle_row.append(row_content)
-            
-        if bundle_row:
-            row_content = '\n'.join(bundle_row)
+        def flush_bundle(start_idx: int, end_idx: int):
+            """Create a LangchainDocument from the current bundle_rows and append to documents."""
+            if not bundle_rows:
+                return
+            page_content = "\n".join(bundle_rows)
             metadata = {
                 "tenant_id": document.tenant_id,
                 "project_uuid": document.project_uuid,
-                "document_name": document.document_name
+                "document_name": document.document_name,
+                "row_range": f"{start_idx}-{end_idx}",  
             }
-            doc = LangchainDocument(page_content=row_content, metadata=metadata)
+            doc = LangchainDocument(page_content=page_content, metadata=metadata)
             documents.append(doc)
-            
+
+        start_idx_of_bundle = 0
+
+        for idx, row in df.iterrows():
+            # Build a readable line like "col1: val1, col2: val2, ..."
+            row_str = ", ".join(f"{col}: {row[col]}" for col in df.columns)
+            bundle_rows.append(row_str)
+
+            # If we reached bundle_size, flush and reset
+            if len(bundle_rows) == bundle_size:
+                flush_bundle(start_idx_of_bundle, idx)
+                bundle_rows.clear()
+                start_idx_of_bundle = idx + 1
+
+        
+        if bundle_rows:
+            flush_bundle(start_idx_of_bundle, df.index[-1])
+
         return documents
