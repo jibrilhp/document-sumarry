@@ -63,9 +63,9 @@ class ChatBotV2Repository:
         chatbot.add_edges("memory_update", "store_response")
         chatbot.add_edges("store_response", END)
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
-        g = compiled_graph.get_graph().draw_mermaid_png()
-        with open("chatbot_v2.png", "w+b") as f:
-            f.write(g)
+        # g = compiled_graph.get_graph().draw_mermaid_png()
+        # with open("chatbot_v2.png", "w+b") as f:
+        #     f.write(g)
         self.__chat_states[thread_id] = compiled_graph
         return compiled_graph
     
@@ -170,7 +170,7 @@ class ChatBotV2Repository:
             Context dari percakapan sebelumnya: {conversation_memory}
 
             Aturan kerja:
-            1. SELALU mulai dengan vector_search menggunakan pertanyaan pengguna.
+            1. SELALU mulai dan utamakan dengan vector_search menggunakan pertanyaan pengguna.
             2. Evaluasi apakah hasil vector_search cukup untuk menjawab pertanyaan dengan yakin:
             - Cukup = mengandung fakta atau data relevan yang langsung menjawab pertanyaan.
             - Kurang = informasi tidak ada, tidak spesifik, atau tidak lengkap.
@@ -182,6 +182,7 @@ class ChatBotV2Repository:
             7. Jika setelah semua langkah jawaban masih belum lengkap atau ambigu, set `needs_clarification=true` dan jelaskan kekurangannya.
             8. Jika yakin, set `needs_clarification=false`.
             9. Gunakan context dari percakapan sebelumnya untuk memberikan jawaban yang lebih relevan dan kontekstual.
+            10. Jawaban harus dalam bahasa yang sama dengan pertanyaan pengguna.
         """
         
         react_agent = create_react_agent(
@@ -528,6 +529,7 @@ class ChatBotV2Repository:
 
             Output guidelines:
             - *Always return exact number as you get from the SQL query.*
+            - Always answer with the same language as the user's question.
 
             Table information:
             {db.get_table_info()}

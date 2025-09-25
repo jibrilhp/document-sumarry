@@ -64,20 +64,18 @@ class StorageRepository:
     def load_csv_document_with_langchain(self, document: DocumentDb) -> List[LangchainDocument]:
         """
         Loads a CSV file, processes its content, and returns a list of LangchainDocument objects.
-
-        Each row in the CSV is treated as a separate document.
-
+        Each document is a self-contained Markdown table chunk with headers to preserve context.
         Args:
             document: A DocumentDb object containing metadata and the path to the CSV file.
-
         Returns:
-            A list of LangchainDocument objects, where each object represents a row from the CSV.
+            A list of LangchainDocument objects, where each object represents a chunk of the CSV as a Markdown table.
         """
         file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
         logging.info(f"Loading CSV from {file_path}")
         
         try:
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=str)
+            df = df.fillna("")
         except FileNotFoundError:
             logging.error(f"CSV file not found at {file_path}")
             return []
@@ -85,20 +83,35 @@ class StorageRepository:
             logging.error(f"Failed to read CSV file at {file_path}: {e}")
             return []
 
-        bundle_row: List[str] = []
+        # Convert each row into a descriptive string: "col1: val1, col2: val2, ..."
+        descriptive_rows = [
+            ", ".join(f"{col}: {val}" for col, val in row.astype(str).to_dict().items())
+            for _, row in df.iterrows()
+        ]
+        
+        all_rows_as_text = "\n".join(descriptive_rows)
+        
+        # Use a dynamic text splitter to create meaningful chunks from the text
+        chunk_size, overlap = self.dynamic_split_text(all_rows_as_text, target_chunk=20)
+        logging.info(f"Descriptive text length: {len(all_rows_as_text)}, Chunk size: {chunk_size}, Overlap: {overlap}")
+        
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size, 
+            chunk_overlap=overlap, 
+            separators=["\n\n", "\n", ". ", ", ", " "]
+        )
+        
+        splitted_texts = text_splitter.split_text(all_rows_as_text)
+        
         documents: List[LangchainDocument] = []
-        for index, row in df.iterrows():
-            # Convert each row to a string format. You can customize this part.
-            row_content = ', '.join(f'{col}: {val}' for col, val in row.astype(str).to_dict().items())
-            
+        for i, chunk in enumerate(splitted_texts):
             metadata = {
                 "tenant_id": document.tenant_id,
                 "project_uuid": document.project_uuid,
-                "row_number": index + 1 ,
-                "document_name": document.document_name
+                "document_name": document.document_name,
+                "chunk_number": i + 1,
             }
-            
-            doc = LangchainDocument(page_content=row_content, metadata=metadata)
+            doc = LangchainDocument(page_content=chunk, metadata=metadata)
             documents.append(doc)
             
         return documents
