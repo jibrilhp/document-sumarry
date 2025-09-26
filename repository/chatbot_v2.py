@@ -63,9 +63,6 @@ class ChatBotV2Repository:
         chatbot.add_edges("memory_update", "store_response")
         chatbot.add_edges("store_response", END)
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
-        g = compiled_graph.get_graph().draw_mermaid_png()
-        with open("chatbot_v2.png", "w+b") as f:
-            f.write(g)
         self.__chat_states[thread_id] = compiled_graph
         return compiled_graph
     

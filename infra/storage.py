@@ -64,20 +64,19 @@ class StorageRepository:
     def load_csv_document_with_langchain(self, document: DocumentDb) -> List[LangchainDocument]:
         """
         Loads a CSV file, processes its content, and returns a list of LangchainDocument objects.
-
-        Each row in the CSV is treated as a separate document.
+        Each document bundles up to 2 rows from the CSV.
 
         Args:
             document: A DocumentDb object containing metadata and the path to the CSV file.
 
         Returns:
-            A list of LangchainDocument objects, where each object represents a row from the CSV.
+            A list of LangchainDocument objects, where each object represents a bundle of up to 2 rows from the CSV.
         """
         file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
         logging.info(f"Loading CSV from {file_path}")
         
         try:
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=str).fillna("")
         except FileNotFoundError:
             logging.error(f"CSV file not found at {file_path}")
             return []
@@ -85,21 +84,40 @@ class StorageRepository:
             logging.error(f"Failed to read CSV file at {file_path}: {e}")
             return []
 
-        bundle_row: List[str] = []
         documents: List[LangchainDocument] = []
-        for index, row in df.iterrows():
-            # Convert each row to a string format. You can customize this part.
-            row_content = ', '.join(f'{col}: {val}' for col, val in row.astype(str).to_dict().items())
+        bundle_size = 2
+        bundle_rows: List[str] = []
+
+        def flush_bundle(start_idx: int, end_idx: int):
+            """Create a LangchainDocument from the current bundle_rows and append to documents."""
+            if not bundle_rows:
+                return
+            
+            header_info = f"Columns: {', '.join(df.columns)}\n"
+            page_content = header_info + "\n".join(bundle_rows)
             
             metadata = {
                 "tenant_id": document.tenant_id,
                 "project_uuid": document.project_uuid,
-                "row_number": index + 1 ,
-                "document_name": document.document_name
+                "document_name": document.document_name,
+                "row_range": f"{start_idx + 1}-{end_idx + 1}",
             }
-            
-            doc = LangchainDocument(page_content=row_content, metadata=metadata)
+            doc = LangchainDocument(page_content=page_content, metadata=metadata)
             documents.append(doc)
+
+        start_idx_of_bundle = 0
+
+        for idx, row in df.iterrows():
+            row_str = ", ".join(f"{col}: {row[col]}" for col in df.columns)
+            bundle_rows.append(row_str)
+
+            if len(bundle_rows) == bundle_size:
+                flush_bundle(start_idx_of_bundle, idx)
+                bundle_rows.clear()
+                start_idx_of_bundle = idx + 1
+        
+        if bundle_rows:
+            flush_bundle(start_idx_of_bundle, df.index[-1])
             
         return documents
     
