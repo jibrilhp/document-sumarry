@@ -608,8 +608,6 @@ class ChatBotV2Repository:
             Processing guidelines:
             - read the answer carefully and understand the data
             - generate a valid Vega-Lite v5 chart specification based on the answer
-            - choose the most appropriate chart type (bar, line, scatter, pie, etc.) based on the data and context
-            - ensure the chart is clear and effectively communicates the information
             - if you have different metrics make sure use different colors to differentiate them
                                                   
             CRITICAL RULES:                        
@@ -631,9 +629,7 @@ class ChatBotV2Repository:
                         "x": {{"field": "field1", "type": "nominal", "axis": {{"title": "X Axis Title"}}}},
                         "y": {{"field": "field2", "type": "quantitative", "axis": {{"title": "Y Axis Title"}}}}
                     }},
-                    "selection": {{
-                     "zoom": {{ "type": "interval", "bind": "scales" }}
-                    }},
+               
                 }}
             }}
         """)
