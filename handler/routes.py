@@ -16,7 +16,7 @@ import logging
 import magic
 import jwt
 from infra.settings import Settings
-from util.util import extract_filename_from_prompt
+from util.util import extract_filename_from_prompt, normalize_filename
 
 class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, settings: Settings):
@@ -461,6 +461,7 @@ class Routes:
         async def __fill_conversation(conversation: Conversation, files: List[UploadFile], document_usecase: DocumentUsecase) -> Conversation:
             __check_file_validity(files)
             for file in files:
+                file.filename = normalize_filename(file.filename)
                 document = Document(file=file)
                 document.set_multinancy_attr(project_uuid=conversation.project_id, tenant_id=conversation.tenant_id)
                 document_db = document_usecase.store_document(document=document)
