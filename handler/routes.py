@@ -6,6 +6,7 @@ from entity.user import LoginRequest, UserAccessTokenRequest, UserAccessTokenRes
 from entity.document import Document, DocumentDb, DocumentRequest, UploadXAIFile
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState, ConversationStateV2
+from entity.document import FileType
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge, UnauthorizedAccess
 from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query, Request, Depends
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
@@ -430,12 +431,18 @@ class Routes:
                         document = Document(file=file)
                         document.set_multinancy_attr(project_uuid=project_id, tenant_id=username)
                         document_db = self.document_usecase.store_document(document=document)
-                        langchain_document = await self.document_usecase.document_vectorization(document=document_db)
-                        conversation.document_from_user.extend(langchain_document)
+                        if document_db.document_type == FileType.CSV_DOCUMENT.value or document_db.document_type == FileType.EXCEL_DOCUMENT.value:
+                            dataframe = await self.document_usecase.load_document_to_dataframe(document=document_db)
+                            conversation.dataframe_from_user = dataframe
+                        else:
+                            langchain_document = await self.document_usecase.document_vectorization(document=document_db)
+                            conversation.document_from_user.extend(langchain_document)
+                    conversation.file_name = document_db.document_name
                 
                 conversation.project_id = project_id
                 conversation.tenant_id = username
                 response = self.conversation_usecase.chat_with_agentv2(conversation=conversation)
+                conversation.dataframe_from_user = None
                 # request.state.req_token = req_token
                 # request.state.res_token = res_token
                 return response
@@ -494,9 +501,9 @@ class Routes:
             file: UploadFile,
         ):
             try:
-                if tenant_id is "":
+                if tenant_id == "":
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tenant-Id is required")
-                if project_uuid is "":
+                if project_uuid == "":
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project-UUID is required")
                 upload_xai_file = UploadXAIFile(tenant_id=tenant_id, project_uuid=project_uuid, file=file)
                 response = await self.conversation_usecase.upload_xai_file(upload_xai_file)

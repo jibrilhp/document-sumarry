@@ -6,16 +6,20 @@ from langchain_core.runnables.base import RunnableLike
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langchain_core.documents import Document
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from langchain_core.messages import AnyMessage, BaseMessage
+from pandas import DataFrame
 
 class Conversation(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     project_id: str | None = ""
     conversation_uuid: str | None = ""
     message: str | None = ""
     tenant_id: str | None = ""
     document_from_user: List[Document] | None = list()
     is_stream: bool | None = False
+    file_name: str = ""
+    dataframe_from_user: DataFrame | None = None
 
 class State(MessagesState):
     context: str
@@ -104,7 +108,9 @@ class StateV2(MessagesState):
     question: str
     agent_answer: AgentResponseV2
     # Document related
+    file_name: str
     document_from_user: List[Document]
+    dataframe_from_user: str | None
     document_idx: int
     context: List[Document]
     # Database related

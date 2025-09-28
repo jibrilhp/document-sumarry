@@ -141,6 +141,8 @@ class ConversationUsecase:
                 "messages": [HumanMessage(content=conversation.message)],
                 "document_from_user": conversation.document_from_user if conversation.document_from_user is not None else [],
                 "database_config": client_db,
+                "file_name": conversation.file_name,
+                "dataframe_from_user": conversation.dataframe_from_user.to_json() if conversation.dataframe_from_user is not None else None,
             },
             config=config,
             stream_mode="values",

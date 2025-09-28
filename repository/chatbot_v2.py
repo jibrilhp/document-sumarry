@@ -19,7 +19,10 @@ from langmem.short_term import SummarizationNode
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_core.messages import AIMessage
-import json
+from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+from langchain.agents.agent_types import AgentType
+from pandas import read_json
+from io import StringIO
 
 class ChatBotV2Repository:
     def __init__(
@@ -45,6 +48,7 @@ class ChatBotV2Repository:
         chatbot.add_node("specific_assistance", self.__specific_knowledge_agent_chain)
         chatbot.add_node("sql_assistant", self.__sql_agent_chain)
         chatbot.add_node("chart_generator", self.__generate_chart)
+        chatbot.add_node("pandas_dataframe_agent", self.__pandas_dataframe_chain)
        
         chatbot.add_node("initial_summary", self.__generate_initial_summary)
         chatbot.add_node("summary_refinement", self.__generate_summary_refinement)
@@ -60,6 +64,7 @@ class ChatBotV2Repository:
         chatbot.add_edges("specific_assistance", "memory_update")
         chatbot.add_edges("sql_assistant", "chart_generator")
         chatbot.add_edges("chart_generator", "memory_update")
+        chatbot.add_edges("pandas_dataframe_agent", "memory_update")
         chatbot.add_edges("memory_update", "store_response")
         chatbot.add_edges("store_response", END)
         compiled_graph = chatbot.compile_graph(checkpointer=self.__checkpointer)
@@ -123,6 +128,9 @@ class ChatBotV2Repository:
         return prompt | self.__generative_adapter.chat_model.with_structured_output(RouterOutputV2)
     
     def __create_workflow_routing_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        file_name = state.get("file_name", "")
+        if "csv" in file_name or "xlsx" in file_name:
+            return {"router_output": "pandas_dataframe_agent", "question": state["messages"][-1], "db_name": "", "file_name": file_name, "dataframe_from_user": state.get("dataframe_from_user", None)}
         question = state["messages"][-1]
         conversation_memory = state.get("conversation_memory", "No conversation memory available")
         
@@ -152,11 +160,13 @@ class ChatBotV2Repository:
         
         return {"router_output": output_router.output_router, "question": output_router.rephrased_question, "db_name": output_router.table_name}
     
-    def __llm_router(self, state: StateV2) -> Literal["specific_assistance", "sql_assistant"]:
+    def __llm_router(self, state: StateV2) -> Literal["specific_assistance", "sql_assistant", "pandas_dataframe_agent"]:
         route = state.get("router_output")
         self.__logger.info("llm router answer: {}".format(route))
         if route == "sql_assistant":
             return "sql_assistant"
+        if route == "pandas_dataframe_agent":
+            return "pandas_dataframe_agent"
         return "specific_assistance"    
         
     def __specific_knowledge_agent(self, conversation_memory: str = "") -> Runnable:
@@ -667,7 +677,7 @@ class ChatBotV2Repository:
             else:
                 self.__logger.warning("No agent_answer found in state")
             
-            return {"messages": [AIMessage(content=agent_answer.model_dump_json())]}
+            return {"messages": [AIMessage(content=agent_answer.model_dump_json())], "dataframe_from_user": None}
             
         except Exception as e:
             self.__logger.error(f"Error in store_response: {e}")
@@ -689,3 +699,33 @@ class ChatBotV2Repository:
                 conversation_list.append(conv)
         return conversation_list
 
+    def __pandas_dataframe_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
+        dataframe_from_user = state.get("dataframe_from_user")
+        if dataframe_from_user is not None:
+            dataframe_from_user = read_json(StringIO(dataframe_from_user))
+        
+        prefix = f"""
+        This is the memory of the conversation: {state.get("conversation_memory")}
+        You are working with a pandas dataframe in Python. The name of the dataframe is `df`.
+        You should use the tools below to answer the question posed of you.
+        You must answer in Bahasa Indonesia with a descriptive tone.
+        """
+
+        agent = create_pandas_dataframe_agent(
+            self.__generative_adapter.chat_model, 
+            dataframe_from_user, 
+            agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION, 
+            verbose=True,
+            prefix=prefix,
+            allow_dangerous_code=True)
+        result = agent.invoke(state.get("question"), config=config).get("output")
+        
+        file_name = state.get("file_name")
+        references = {file_name} if file_name else set()
+
+        agent_response: AgentResponseV2 = AgentResponseV2(
+            answer=result,
+            references=references,
+            needs_clarification=False
+        )
+        return {"agent_answer": agent_response, "dataframe_from_user": None}
