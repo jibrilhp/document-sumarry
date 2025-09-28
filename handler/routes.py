@@ -3,10 +3,9 @@ from usecase.project import ProjectUsecase
 from usecase.conversation import ConversationUsecase
 from usecase.user import UserUsecase
 from entity.user import LoginRequest, UserAccessTokenRequest, UserAccessTokenResponse
-from entity.document import Document, DocumentDb, DocumentRequest, UploadXAIFile
+from entity.document import Document, DocumentDb, DocumentRequest, UploadXAIFile, FileType
 from entity.project import Project
 from entity.conversation import Conversation, ConversationState, ConversationStateV2
-from entity.document import FileType
 from error.error import FileConflictDb, DatabaseError, ResourceNotFound, UnknownFileType, FileTooLarge, UnauthorizedAccess
 from fastapi import Header, status, UploadFile, APIRouter, HTTPException, Form, Query, Request, Depends
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse
@@ -17,6 +16,7 @@ import logging
 import magic
 import jwt
 from infra.settings import Settings
+from util.util import extract_filename_from_prompt
 
 class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, settings: Settings):
@@ -426,19 +426,15 @@ class Routes:
                     tenant_id=username,
                 )
                 if files is not None:
-                    __check_file_validity(files)
-                    for file in files:
-                        document = Document(file=file)
-                        document.set_multinancy_attr(project_uuid=project_id, tenant_id=username)
-                        document_db = self.document_usecase.store_document(document=document)
-                        if document_db.document_type == FileType.CSV_DOCUMENT.value or document_db.document_type == FileType.EXCEL_DOCUMENT.value:
-                            dataframe = await self.document_usecase.load_document_to_dataframe(document=document_db)
-                            conversation.dataframe_from_user = dataframe
-                        else:
-                            langchain_document = await self.document_usecase.document_vectorization(document=document_db)
-                            conversation.document_from_user.extend(langchain_document)
-                    conversation.file_name = document_db.document_name
-                
+                    conversation = await __fill_conversation(conversation, files, self.document_usecase)
+                else:
+                    conversation.file_name = extract_filename_from_prompt(message)
+                    if conversation.file_name != "" and not __is_file_exist(conversation, self.document_usecase):
+                        raise ResourceNotFound(message="please upload file first before interact with it")
+                    if conversation.file_name.__contains__("csv") or conversation.file_name.__contains__("xlsx"):
+                        conversation.dataframe_from_user = await self.document_usecase.load_document_to_dataframe(document=DocumentDb(project_uuid=project_id, tenant_id=username, document_name=conversation.file_name))
+                    elif conversation.file_name != "":
+                        raise UnknownFileType(message="sorry, this file type is not supported yet")
                 conversation.project_id = project_id
                 conversation.tenant_id = username
                 response = self.conversation_usecase.chat_with_agentv2(conversation=conversation)
@@ -462,6 +458,28 @@ class Routes:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "please try again later")
 
+        async def __fill_conversation(conversation: Conversation, files: List[UploadFile], document_usecase: DocumentUsecase) -> Conversation:
+            __check_file_validity(files)
+            for file in files:
+                document = Document(file=file)
+                document.set_multinancy_attr(project_uuid=conversation.project_id, tenant_id=conversation.tenant_id)
+                document_db = document_usecase.store_document(document=document)
+                if document_db.document_type == FileType.CSV_DOCUMENT.value or document_db.document_type == FileType.EXCEL_DOCUMENT.value:
+                    dataframe = await document_usecase.load_document_to_dataframe(document=document_db)
+                    conversation.dataframe_from_user = dataframe
+                else:
+                    langchain_document = await document_usecase.document_vectorization(document=document_db)
+                    conversation.document_from_user.extend(langchain_document)
+                conversation.file_name = document_db.document_name
+            return conversation
+
+        def __is_file_exist(conversation: Conversation, document_usecase: DocumentUsecase)->bool:
+            files = document_usecase.get_document(documentDb=DocumentDb(project_uuid=conversation.project_id, tenant_id=conversation.tenant_id))
+            for file in files:
+                if file.document_name == conversation.file_name:
+                    return True
+            return False
+
         @self.app.get("/v2/internal/conversation/{conversation_uuid}")
         async def internal_chat_history_v2(
             tenant_id: Annotated[str | None, Header()],
@@ -476,7 +494,8 @@ class Routes:
                 else:
                     self.user_usecase.get_api_key(username=username, api_key=api_key)
                 conversation = Conversation(tenant_id=tenant_id, conversation_uuid=conversation_uuid)
-                return self.conversation_usecase.get_chat_history_v2(conversation)
+                response = self.conversation_usecase.get_chat_history_v2(conversation)
+                return response
             except UnauthorizedAccess as e:
                 self.logger.error(str(e))
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "unauthorized access, please provide valid API key")
