@@ -6,7 +6,7 @@ from typing import List
 from static.enum import FileType
 from langchain_core.documents import Document as LangchainDocument
 import logging
-
+from util.util import normalize_filename
 class DocumentUsecase:
     def __init__(self, document_repository: DocumentRepository, storage_repository: StorageRepository, ollama_adapter: GenerativeAdapter):
         self.document_repository = document_repository
@@ -15,13 +15,13 @@ class DocumentUsecase:
         self.logger = logging.getLogger(__name__)
 
     def store_document(self, document: Document):
-        document_db_from_file = DocumentDb(document_name=document.file.filename)
+        document_db_from_file = DocumentDb(document_name=normalize_filename(document.file.filename))
         document_db_from_file.set_multinancy_attr(project_uuid=document.project_uuid, tenant_id=document.tenant_id)
         document_db = self.document_repository.get_document_by_name(document_db_from_file)
         if document_db.document_name != "":
             self.logger.info("document already exist: {}".format(document_db.document_name))
             return document_db
-        self.logger.info("processing file {}".format( document.file.filename))
+        self.logger.info("processing file {}".format( normalize_filename(document.file.filename)))
         self.storage_repository.store_document(document=document)
         return self.document_repository.store_document(document=document)
     
@@ -70,7 +70,7 @@ class DocumentUsecase:
             return langchain_document
 
     async def load_document_to_dataframe(self, document: DocumentDb):
-        document_from_db = self.document_repository.get_document(document=document)
+        document_from_db = self.document_repository.get_document_by_name(document=document)
         if document_from_db.document_type == FileType.CSV_DOCUMENT.value:
             return self.storage_repository.load_csv_to_dataframe(document=document_from_db)
         elif document_from_db.document_type == FileType.EXCEL_DOCUMENT.value:

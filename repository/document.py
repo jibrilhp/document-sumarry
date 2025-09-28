@@ -58,9 +58,9 @@ class DocumentRepository:
     def get_document_by_name(self, document: DocumentDb)-> DocumentDb:
         with self.db_adapter.get_connection() as conn:
             try:
-                sql = "select uuid, document_name, is_processed, document_type_id, created_at, updated_at, tenant_id, projects_uuid from documents where document_name = %s AND tenant_id = %s limit 1"
-                data = (document.document_name,document.tenant_id)
-                self.logger.info("get document with where {} {}".format( document.uuid, document.tenant_id))
+                sql = "select uuid, document_name, is_processed, document_type_id, created_at, updated_at, tenant_id, projects_uuid from documents where document_name = %s limit 1"
+                data = (document.document_name,)
+                self.logger.info("get document with where {}".format( document.document_name))
                 results = conn.execute(sql, data).fetchall()
                 if results.__len__() == 0:
                     return DocumentDb()
