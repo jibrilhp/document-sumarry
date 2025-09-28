@@ -177,3 +177,14 @@ class StorageRepository:
             flush_bundle(start_idx_of_bundle, df.index[-1])
 
         return documents
+
+
+    def load_csv_to_dataframe(self, document: DocumentDb) -> pd.DataFrame:
+        file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
+        logging.info(f"Loading CSV to DataFrame from {file_path}")
+        return pd.read_csv(file_path, dtype=str)
+    
+    def load_xlsx_to_dataframe(self, document: DocumentDb) -> pd.DataFrame:
+        file_path = f"{self.__FILE_PATH__}/{document.project_uuid}/{document.document_name}"
+        logging.info(f"Loading XLSX to DataFrame from {file_path}")
+        return pd.read_excel(file_path, dtype=str)

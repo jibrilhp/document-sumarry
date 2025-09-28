@@ -68,3 +68,11 @@ class DocumentUsecase:
             document_db.is_processed = True
             self.document_repository.update_document(document=document_db)
             return langchain_document
+
+    async def load_document_to_dataframe(self, document: DocumentDb):
+        document_from_db = self.document_repository.get_document(document=document)
+        if document_from_db.document_type == FileType.CSV_DOCUMENT.value:
+            return self.storage_repository.load_csv_to_dataframe(document=document_from_db)
+        elif document_from_db.document_type == FileType.EXCEL_DOCUMENT.value:
+            return self.storage_repository.load_xlsx_to_dataframe(document=document_from_db)
+        raise ValueError("Invalid document type")
