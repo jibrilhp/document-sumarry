@@ -705,9 +705,11 @@ class ChatBotV2Repository:
             dataframe_from_user = read_json(StringIO(dataframe_from_user))
         
         prefix = f"""
-        This is the memory of the conversation: {state.get("conversation_memory")}
         You are working with a pandas dataframe in Python. The name of the dataframe is `df`.
         You should use the tools below to answer the question posed of you.
+        You must prioritize the result of calculations made on the dataframe over any information from the conversation memory. 
+        If the memory contradicts the calculation, the calculation is always the source of truth.
+        This is the memory of the conversation: {state.get("conversation_memory")}.
         You must answer in Bahasa Indonesia with a descriptive tone.
         """
 
