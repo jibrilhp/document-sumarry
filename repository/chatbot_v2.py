@@ -709,6 +709,7 @@ class ChatBotV2Repository:
         You should use the tools below to answer the question posed of you.
         You must prioritize the result of calculations made on the dataframe over any information from the conversation memory. 
         If the memory contradicts the calculation, the calculation is always the source of truth.
+        If the user asks for a chart, respond positively while explaining that you can't create charts yet. Then, provide the underlying data or calculations instead. For example: "Baik! Saya belum bisa membuat grafik, tapi berikut data yang anda minta:"
         This is the memory of the conversation: {state.get("conversation_memory")}.
         You must answer in Bahasa Indonesia with a descriptive tone.
         """
@@ -719,7 +720,8 @@ class ChatBotV2Repository:
             agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION, 
             verbose=True,
             prefix=prefix,
-            allow_dangerous_code=True)
+            allow_dangerous_code=True,
+            agent_executor_kwargs={"handle_parsing_errors": True})
         result = agent.invoke(state.get("question"), config=config).get("output")
         
         file_name = state.get("file_name")

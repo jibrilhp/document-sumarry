@@ -11,6 +11,10 @@ class TestUtil(unittest.TestCase):
             "Please check @document.xlsx.": "document.xlsx",
             "Data is in @my-file_v2.json!": "my-file_v2.json",
             "Compare @data1.csv": "data1.csv",
+            "Compare @Imigrasi.csv": "imigrasi.csv",
+            "Compare @Imigrasi_123.csv": "imigrasi_123.csv",
+            "Compare @IMIGRASI_123.csv": "imigrasi_123.csv",
+            "@Imigrasi_123.csv": "imigrasi_123.csv",
         }
 
         for prompt, expected in test_cases.items():
