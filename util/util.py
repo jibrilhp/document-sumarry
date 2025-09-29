@@ -19,7 +19,7 @@ def extract_filename_from_prompt(prompt: str) -> str:
     if match:
         # Strip common trailing punctuation from the extracted filename
         filename = match.group(1)
-        return filename.rstrip('.,!?')
+        return filename.rstrip('.,!?').lower()
     return ""
 
 def normalize_filename(filename: str) -> str:
