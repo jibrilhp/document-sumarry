@@ -1,27 +1,30 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
-from langchain_ollama.llms import OllamaLLM
+from langchain_ollama import ChatOllama  
 from langchain_ollama.embeddings import OllamaEmbeddings
 from infra.settings import Settings
 import logging
 from langchain_core.rate_limiters import InMemoryRateLimiter
 
-
 class GenerativeAdapter:
     def __init__(self, settings: Settings):
         self.__choose_provider(settings)
-
+    
     def __choose_provider(self, settings: Settings):
         if settings.LLM_PROVIDER == "ollama":
             self.embedding_model = OllamaEmbeddings(
                 model=settings.EMBEDDING_MODEL_NAME,
                 base_url=settings.OLLAMA_BASE_URL
             )
-            self.chat_model = OllamaLLM(
+            # Use ChatOllama instead of OllamaLLM for structured outputs
+            self.chat_model = ChatOllama(
                 model=settings.CHAT_MODEL_NAME,
-                base_url=settings.OLLAMA_BASE_URL
+                base_url=settings.OLLAMA_BASE_URL,
+                temperature=0.0,
+                format="json"  # Important for structured outputs
             )
-            logging.info(f"using ollama provider with base URL: {settings.OLLAMA_BASE_URL}.  chat model: {settings.CHAT_MODEL_NAME}, embedding model: {settings.EMBEDDING_MODEL_NAME}")
+            logging.info(f"using ollama provider with base URL: {settings.OLLAMA_BASE_URL}. chat model: {settings.CHAT_MODEL_NAME}, embedding model: {settings.EMBEDDING_MODEL_NAME}")
+        
         elif settings.LLM_PROVIDER == "google":
             rate_limiter = InMemoryRateLimiter(
                 requests_per_second=0.2,
@@ -36,16 +39,20 @@ class GenerativeAdapter:
                 temperature=0.0
             )
             logging.info(f"using google generative provider")
+        
         elif settings.LLM_PROVIDER == "ollama_cpu":
             self.embedding_model = OllamaEmbeddings(
                 model=settings.EMBEDDING_MODEL_NAME,
                 base_url=settings.OLLAMA_BASE_URL,
             )
-            self.chat_model = OllamaLLM(
+            self.chat_model = ChatOllama(
                 model=settings.CHAT_MODEL_NAME,
                 base_url=settings.OLLAMA_BASE_URL,
+                temperature=0.0,
+                format="json",
                 num_gpu=0  # Force CPU usage
             )
             logging.info(f"using ollama provider (force CPU usage) with base URL: {settings.OLLAMA_BASE_URL}. chat model: {settings.CHAT_MODEL_NAME}, embedding model: {settings.EMBEDDING_MODEL_NAME}")
+        
         else:
             raise ValueError("Invalid LLM provider")
