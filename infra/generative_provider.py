@@ -16,12 +16,12 @@ class GenerativeAdapter:
                 model=settings.EMBEDDING_MODEL_NAME,
                 base_url=settings.OLLAMA_BASE_URL
             )
-            # Use ChatOllama instead of OllamaLLM for structured outputs
+       
             self.chat_model = ChatOllama(
                 model=settings.CHAT_MODEL_NAME,
                 base_url=settings.OLLAMA_BASE_URL,
                 temperature=0.0,
-                format="json"  # Important for structured outputs
+                format="json" 
             )
             logging.info(f"using ollama provider with base URL: {settings.OLLAMA_BASE_URL}. chat model: {settings.CHAT_MODEL_NAME}, embedding model: {settings.EMBEDDING_MODEL_NAME}")
         
@@ -50,7 +50,7 @@ class GenerativeAdapter:
                 base_url=settings.OLLAMA_BASE_URL,
                 temperature=0.0,
                 format="json",
-                num_gpu=0  # Force CPU usage
+                num_gpu=0  
             )
             logging.info(f"using ollama provider (force CPU usage) with base URL: {settings.OLLAMA_BASE_URL}. chat model: {settings.CHAT_MODEL_NAME}, embedding model: {settings.EMBEDDING_MODEL_NAME}")
         
