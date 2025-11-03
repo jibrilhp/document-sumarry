@@ -255,6 +255,7 @@ agents:
 
         Query guidelines:
         - Unless the user specifies a specific number of examples, always LIMIT results to at most 5.
+  
         - You can order the results by a relevant column to return the most interesting examples.
         - Never query for all the columns from a table; only use relevant columns.
         - Double check your query before executing it.
