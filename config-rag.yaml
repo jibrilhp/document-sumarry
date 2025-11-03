@@ -1,342 +1,86 @@
-
-version: 1
-
-schemas:
-  # Pydantic models you already have — referenced by name
-  state: StateV2
-  agent_response: AgentResponseV2
-  router_output: RouterOutputV2
-  db_config: DatabaseConfig
-  chart_data: ChartData
-  conversation_state: ConversationStateV2
-
-tools:
-  - name: vector_search
-    type: internal
-    description: "Semantic similarity over pgvector"
-    args_schema: VectorSearchInput
-    returns: VectorSearchOutput
-    config:
-      k: ${VECTOR_K:3}
-      score_threshold: ${VECTOR_SCORE_THRESHOLD:0.60}
-  - name: tavily_search
-    type: tavily.search
-    config:
-      max_results: ${TAVILY_MAX_RESULTS:3}
-      topic: general
-  - name: tavily_extract
-    type: tavily.extract
-    config: {}
-
-dataframes:
-  pandas_agent:
-    agent_type: ZERO_SHOT_REACT_DESCRIPTION
-    verbose: true
-    allow_dangerous_code: true
-    parsing:
-      handle_parsing_errors: true
-    language: id-ID
-    prefix: |
-      You are working with a pandas dataframe in Python. The name of the dataframe is `df`.
-      You must prioritize calculations on `df` over conversation memory.
-      If the user asks for a chart, say you can't create charts yet and provide the underlying data.
-      Conversation memory: {conversation_memory}
-    safety:
-      max_rows_preview: 10000
-      hard_timeout_s: 30
-
-sql:
-  guardrails:
-    prohibit_dml: true
-    limit_rows_default: 5
-    only_relevant_columns: true
-    retry_on_error: 2
-  vega_chart:
-    enabled: true
-    height: 700
-  connection:
-    # created via postgres_adapter.create_sql_database
-    search_path: public
-
-graph:
-  engine: langgraph
-  start: START
-  end: END
-
-  nodes:
-    memory_retrieval:
-      kind: function
-      handler: ChatBotV2Repository.__memory_retrieval_node
-    llm_router:
-      kind: function
-      handler: ChatBotV2Repository.__create_workflow_routing_chain
-    specific_assistance:
-      kind: agent
-      handler: ChatBotV2Repository.__specific_knowledge_agent_chain
-      tools: [vector_search, tavily_search, tavily_extract]
-    sql_assistant:
-      kind: agent
-      handler: ChatBotV2Repository.__sql_agent_chain
-    chart_generator:
-      kind: function
-      handler: ChatBotV2Repository.__generate_chart
-    pandas_dataframe_agent:
-      kind: agent
-      handler: ChatBotV2Repository.__pandas_dataframe_chain
-
-    # Document summarization path
-    initial_summary:
-      kind: function
-      handler: ChatBotV2Repository.__generate_initial_summary
-    summary_refinement:
-      kind: function
-      handler: ChatBotV2Repository.__generate_summary_refinement
-    summarize_conversation:
-      kind: node
-      handler: ChatBotV2Repository.__summarization_node
-      params:
-        max_tokens: 512
-    memory_update:
-      kind: function
-      handler: ChatBotV2Repository.__memory_update_node
-    store_response:
-      kind: function
-      handler: ChatBotV2Repository.__store_response
-
-  edges:
-    - from: START
-      to: memory_retrieval
-
-    # Summarization branch if documents are present
-    - from: memory_retrieval
-      to: summarize_conversation
-    - from: summarize_conversation
-      conditional:
-        router: ChatBotV2Repository.__should_summarize
-        mapping:
-          initial_summary: initial_summary
-          llm_router: llm_router
-
-    # Summarization loop (multi-doc)
-    - from: initial_summary
-      conditional:
-        router: ChatBotV2Repository.__should_refine
-        mapping:
-          summary_refinement: summary_refinement
-          store_response: store_response
-    - from: summary_refinement
-      conditional:
-        router: ChatBotV2Repository.__should_refine
-        mapping:
-          summary_refinement: summary_refinement
-          store_response: store_response
-
-    # Main routing
-    - from: llm_router
-      conditional:
-        router: ChatBotV2Repository.__llm_router
-        mapping:
-          specific_assistance: specific_assistance
-          sql_assistant: sql_assistant
-          pandas_dataframe_agent: pandas_dataframe_agent
-
-    # Downstream flows
-    - from: specific_assistance
-      to: memory_update
-    - from: sql_assistant
-      to: chart_generator
-    - from: chart_generator
-      to: memory_update
-    - from: pandas_dataframe_agent
-      to: memory_update
-    - from: memory_update
-      to: store_response
-    - from: store_response
-      to: END
-
-routing:
-  workflow_router_prompt: |
+workflow_router:
+  template: |
     You are a workflow router for a LLM product.
     You should decide where to route user's request based on conversation and user question.
-
+    
     Conversation Memory: {conversation_memory}
-
+    
     Given user question and chat conversation you should route user request to either 2 workflows:
-
+    
     1. specific_assistance:
-       If user ask about specific knowledge and has correlation to previous conversation, use this workflow.
+    If user ask about specific knowledge and has correlation to previous conversation, use this workflow.
     2. sql_assistant:
-       If user ask about either of these {dataset_name} related topics, use this workflow. Fill table_name of the response with one of these table names:{table_name}.
+    If user ask about either of these {dataset_name} related topics, use this workflow. Fill table_name of the response with one of these table names:{table_name}.
 
     You should output either `specific_assistance` and `sql_assistant`.
 
     Question:
     {input}
-  pandas_file_router:
-    csv_xlsx_triggers: ["csv", "xlsx"]   # substring match on file_name
-    route: pandas_dataframe_agent
 
-agents:
-  specific_knowledge:
-    react:
-      model_ref: providers.llm
-      response_format: AgentResponseV2
-      tools: [vector_search, tavily_search, tavily_extract]
-      system_prompt: |
-        Kamu adalah asisten riset yang dapat menggabungkan informasi dari sumber internal (vector_search) dan eksternal (tavily_search, tavily_extract).
+specific_knowledge_agent:
+  template: |
+    Kamu adalah asisten riset yang dapat menggabungkan informasi dari sumber internal (vector_search) dan eksternal (tavily_search, tavily_extract).
 
-        Context dari percakapan sebelumnya: {conversation_memory}
+    Context dari percakapan sebelumnya: {conversation_memory}
 
-        Aturan kerja:
-        1. SELALU mulai dengan vector_search menggunakan pertanyaan pengguna.
-        2. Evaluasi apakah hasil vector_search cukup untuk menjawab pertanyaan dengan yakin:
-           - Cukup = mengandung fakta atau data relevan yang langsung menjawab pertanyaan.
-           - Kurang = informasi tidak ada, tidak spesifik, atau tidak lengkap.
-        3. Jika kurang, gunakan tavily_search untuk mencari informasi tambahan di web.
-        4. Jika dari tavily_search terdapat URL yang relevan namun perlu isi lebih detail, gunakan tavily_extract.
-        5. Gabungkan semua informasi yang ditemukan menjadi satu jawaban terpadu.
-        6. Ambil field `sources` dari `vector_search` untuk mengisi field `references`
-        7. Jika setelah semua langkah jawaban masih belum lengkap atau ambigu, set `needs_clarification=true` dan jelaskan kekurangannya.
-        8. Jika yakin, set `needs_clarification=false`.
-        9. Gunakan context dari percakapan sebelumnya untuk memberikan jawaban yang lebih relevan dan kontekstual.
-    safety:
-      max_hops: 6
-      tool_timeout_s: 30
-  sql_assistant:
-    react:
-      model_ref: providers.llm
-      response_format: AgentResponseV2
-      tools: sql_toolkit
-      # 🔽 Enrich the system prompt with topic hints / join hints
-      system_prompt: |
-        You are an agent designed to interact with a SQL database and provide data visualizations.
+    Aturan kerja:
+    1. SELALU mulai dengan vector_search menggunakan pertanyaan pengguna.
+    2. Evaluasi apakah hasil vector_search cukup untuk menjawab pertanyaan dengan yakin:
+    - Cukup = mengandung fakta atau data relevan yang langsung menjawab pertanyaan.
+    - Kurang = informasi tidak ada, tidak spesifik, atau tidak lengkap.
+    3. Jika kurang, gunakan tavily_search untuk mencari informasi tambahan di web.
+    4. Jika dari tavily_search terdapat URL yang relevan namun perlu isi lebih detail, gunakan tavily_extract.
+    3. Jika kurang, gunakan tavily_search dan tavily_extract untuk mencari informasi tambahan di web
+    5. Gabungkan semua informasi yang ditemukan menjadi satu jawaban terpadu.
+    6. Ambil field `sources` dari `vector_search` untuk mengisi field `references`
+    7. Jika setelah semua langkah jawaban masih belum lengkap atau ambigu, set `needs_clarification=true` dan jelaskan kekurangannya.
+    8. Jika yakin, set `needs_clarification=false`.
+    9. Gunakan context dari percakapan sebelumnya untuk memberikan jawaban yang lebih relevan dan kontekstual.
 
-        Conversation Context: {conversation_memory}
+sql_agent:
+  template: |
+    You are an agent designed to interact with a SQL database and provide data visualizations.
 
-        Important: You must fill *all relevant fields* of the AgentResponseV2 schema.
+    Conversation Context: {conversation_memory}
 
-        === Topic → Table/Column Hints (Must Follow) ===
-        • If the user mentions "visa", "izin masuk", "visa on arrival", "voa", "multiple entry":
-          - Primary table: Visa
-          - Useful columns: Visa.id_visa, Visa.no_paspor, Visa.jenis_visa, Visa.negara_penerbit,
-            Visa.tanggal_terbit, Visa.tanggal_berlaku_sampai, Visa.status
-          - Optional joins:
-            - Paspor ON Visa.no_paspor = Paspor.no_paspor (to fetch Paspor.name, kewarganegaraan, tanggal_lahir)
-            - Perlintasan ON Perlintasan.no_paspor = Visa.no_paspor (to relate visa to crossings)
-            - IzinTinggal ON IzinTinggal.no_paspor = Visa.no_paspor (to relate visa to residence permits)
+    Important: You must fill *all relevant fields* of the AgentResponseV2 schema.
 
-        • If the user mentions "paspor", "passport", "identitas", "nama lengkap":
-          - Primary table: Paspor
-          - Useful columns: Paspor.no_paspor, Paspor.name, Paspor.kewarganegaraan, Paspor.tanggal_lahir
-          - Optional joins: Visa (active visas), Perlintasan (travel history), IzinTinggal (residence status)
+    Given an input question:
+    1. Consider the conversation context to understand what the user is asking about
+    2. Create a syntactically correct {dialect} query to run.
+    3. Look at the results of the query and return the answer in JSON.
 
-        • If the user mentions "perlintasan", "kedatangan", "keberangkatan", "border crossing":
-          - Primary table: Perlintasan
-          - Useful columns: Perlintasan.no_paspor, Perlintasan.tanggal_masuk, Perlintasan.tanggal_keluar,
-            Perlintasan.lokasi, Perlintasan.negara_asal, Perlintasan.negara_tujuan
-          - Optional joins: Paspor (who), Visa (under which visa), IzinTinggal (residence context)
+    Query guidelines:
+    - Unless the user specifies a specific number of examples, always LIMIT results to at most 5.
+    - You can order the results by a relevant column to return the most interesting examples.
+    - Never query for all the columns from a table; only use relevant columns.
+    - Double check your query before executing it.
+    - If a query fails, rewrite and retry.
+    - DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.).
+    - Always check available tables first, then query the schema of the most relevant ones.
+    - Limit your iteration to as minimal as possible when querying.
 
-        • If the user mentions "izin tinggal", "residence permit", "kitap", "kitas":
-          - Primary table: IzinTinggal
-          - Useful columns: IzinTinggal.no_paspor, IzinTinggal.jenis_izin, IzinTinggal.tanggal_terbit,
-            IzinTinggal.berlaku_sampai, IzinTinggal.status
-          - Optional joins: Paspor (identity), Visa (source visa), Perlintasan (entry event)
+    You MUST always return output that conforms to the AgentResponseV2 schema.
 
-        === General Rules ===
-        • When a person’s identity is referenced (e.g., by name), resolve identity via Paspor (use Paspor.name) then join outward.
-        • Prefer SELECT of only relevant columns; always include LIMIT unless the user requests an exact count/aggregate.
-        • Use date filters if user provides time windows; otherwise show most recent 5 rows ordered by a relevant date.
-        • Never use DML (INSERT/UPDATE/DELETE). Read-only.
+    Output guidelines:
+    - *Always return exact number as you get from the SQL query.*
 
-        Given an input question:
-        1. Consider the conversation context to understand what the user is asking about
-        2. Create a syntactically correct {dialect} query to run.
-        3. Look at the results of the query and return the answer in JSON.
+    Table information:
+    {table_info}
 
-        Query guidelines:
-        - Unless the user specifies a specific number of examples, always LIMIT results to at most 5.
-  
-        - You can order the results by a relevant column to return the most interesting examples.
-        - Never query for all the columns from a table; only use relevant columns.
-        - Double check your query before executing it.
-        - If a query fails, rewrite and retry.
-        - DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.).
-        - Always check available tables first, then query the schema of the most relevant ones.
-        - Limit your iteration to as minimal as possible when querying.
+    Usable table names:
+    {usable_table_names}
 
-        You MUST always return output that conforms to the AgentResponseV2 schema.
+    Column Metadata:
+    {column_metadata}
 
-        Output guidelines:
-        - *Always return exact numbers as you get from the SQL query.*
-        - "answer": natural language explanation
-        - "references": set of URLs (empty if none)
-        - "needs_clarification": boolean
-        - "chart": null
+    - "answer": natural language explanation
+    - "references": set of URLs (empty if none)
+    - "needs_clarification": boolean
+    - "chart": null
 
-        Table information:
-        {table_info}
-
-        Usable table names:
-        {usable_tables}
-
-        Column Metadata:
-        {column_metadata}
-    # (Optional) declarative hints you can render from code into {column_metadata}
-    topic_hints:
-      visa:
-        primary_table: Visa
-        joins:
-          - { table: Paspor, on: "Visa.no_paspor = Paspor.no_paspor" }
-          - { table: Perlintasan, on: "Perlintasan.no_paspor = Visa.no_paspor" }
-          - { table: IzinTinggal, on: "IzinTinggal.no_paspor = Visa.no_paspor" }
-      paspor:
-        primary_table: Paspor
-      perlintasan:
-        primary_table: Perlintasan
-      izin_tinggal:
-        primary_table: IzinTinggal
-    chart:
-      generator:
-        prompt: |
-          You are a chart generator.
-          Given only the natural language answer from the database query, generate a valid Vega-Lite v5 chart specification.
-
-          Input:
-          {answer}
-
-          Processing guidelines:
-          - read the answer carefully and understand the data
-          - generate a valid Vega-Lite v5 chart specification based on the answer
-          - if you have different metrics make sure use different colors to differentiate them
-
-          CRITICAL RULES:
-          - Return ONLY a valid JSON object with this exact structure (can be change ONLY need the different metrics colors):
-          {
-            "chart": {
-              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-              "autosize": {"type": "fit", "contains": "padding"},
-              "width": "container",
-              "height": 700,
-              "data": {
-                "values": [
-                  {"field1": "value1", "field2": number1},
-                  {"field1": "value2", "field2": number2}
-                ]
-              },
-              "mark": { "type":"chart_type","tooltip": true },
-              "encoding": {
-                "x": {"field": "field1", "type": "nominal", "axis": {"title": "X Axis Title"}},
-                "y": {"field": "field2", "type": "quantitative", "axis": {"title": "Y Axis Title"}}
-              }
-            }
-          }
-        response_format: ChartData
-
-summarization:
-  node:
-    model_ref: providers.llm
-    max_tokens: 512
-  initial_prompt: |
+initial_summary:
+  template: |
     Buatkan ringkasan terstruktur dari konteks berikut.
 
     ### Perintah ringkasan
@@ -345,7 +89,9 @@ summarization:
     3. Tutup dengan "👉 Ringkasan selesai".
 
     {context}
-  refinement_prompt: |
+
+summary_refinement:
+  template: |
     Anda diminta *memperbaiki* ringkasan.
 
     Ringkasan sementara:
@@ -358,59 +104,78 @@ summarization:
     • Tambahkan fakta penting yang belum tercakup.
     • Perbaiki kesalahan, hindari pengulangan.
     • Tetap ≤ 120 kata dan tutup dengan "👉 Ringkasan selesai".
-  routing:
-    should_summarize:
-      condition: "len(state.document_from_user) > 0"
-    should_refine:
-      condition: "state.document_idx < len(state.document_from_user)"
 
-memory:
-  retrieval:
-    summary_prompt: |
-      Based on the current user question, summarize the most relevant information from the conversation history in 2-3 sentences.
+memory_retrieval:
+  template: |
+    Based on the current user question, summarize the most relevant information from the conversation history in 2-3 sentences.
+    
+    Current Question: {question}
+    
+    Recent Conversation History:
+    {history}
+    
+    Relevant Summary:
 
-      Current Question: {question}
+memory_update:
+  template: |
+    Update the conversation memory with the new information from this interaction.
+    
+    Current Memory: {current_memory}
+    
+    New Information:
+    - Question: {question}
+    - Answer: {answer}
+    
+    Instructions:
+    1. Integrate the new information with existing memory
+    2. Maintain important context and facts
+    3. Keep the summary concise (3-4 sentences max)
+    4. Focus on information that would be useful for future questions
+    
+    Updated Memory:
 
-      Recent Conversation History:
-      {history}
+chart_generator:
+  template: |
+    You are a chart generator.  
+    Given only the natural language answer from the database query, generate a valid Vega-Lite v5 chart specification.
 
-      Relevant Summary:
-    history:
-      keep_last: 10
-  update:
-    prompt: |
-      Update the conversation memory with the new information from this interaction.
+    Input:
+    {answer}
 
-      Current Memory: {current_memory}
+    Processing guidelines:
+    - read the answer carefully and understand the data
+    - generate a valid Vega-Lite v5 chart specification based on the answer
+    - if you have different metrics make sure use different colors to differentiate them
+                                              
+    CRITICAL RULES:                        
+    - Return ONLY a valid JSON object with this exact structure (can be change ONLY need the different metrics colors):                                      
+    {{
+        "chart": {{
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "autosize": {{"type": "fit", "contains": "padding"}},
+            "width": "container",
+            "height": 700, 
+            "data": {{
+                "values": [
+                    {{"field1": "value1", "field2": number1}},
+                    {{"field1": "value2", "field2": number2}}
+                ]
+            }},
+            "mark": {{ "type":"chart_type","tooltip": true }},
+            "encoding": {{
+                "x": {{"field": "field1", "type": "nominal", "axis": {{"title": "X Axis Title"}}}},
+                "y": {{"field": "field2", "type": "quantitative", "axis": {{"title": "Y Axis Title"}}}}
+            }},
+       
+        }}
+    }}
 
-      New Information:
-      - Question: {question}
-      - Answer: {answer}
-
-      Instructions:
-      1. Integrate the new information with existing memory
-      2. Maintain important context and facts
-      3. Keep the summary concise (3-4 sentences max)
-      4. Focus on information that would be useful for future questions
-
-      Updated Memory:
-
-output:
-  format: json
-  schema: AgentResponseV2
-  truncate_guard:
-    # Detect common truncated boilerplate and log hard errors
-    patterns:
-      - "Berikut adalah ringkasan dari dokumen yang diberikan:"
-      - "Berikut adalah analisis"
-      - "Berdasarkan informasi yang tersedia"
-
-recommendations:
-  - "Set VECTOR_SCORE_THRESHOLD to 0.7–0.8 in production to reduce noisy recalls; lower it (0.5–0.6) during early indexing."
-  - "Enforce SQL LIMIT via a post-processor that rejects queries without LIMIT to harden guardrails."
-  - "Cache Tavily results (5–15 min TTL) to cut latency and cost on repeated queries."
-  - "Emit structured telemetry per node (start/end, token usage, tool I/O) to speed up incident triage."
-  - "Add table/column allowlists per db_config to avoid querying sensitive tables."
-  - "Validate Vega-Lite JSON against schema before returning; fallback gracefully to plain text if invalid."
-  - "Use separate llm profiles: higher temp (0.5) for ideation nodes, low temp (0.1–0.2) for routing/SQL/chart."
-  - "Surface `references` back to the UI and persist them to improve debuggability and trust."
+pandas_dataframe_agent:
+  prefix: |
+    You are working with a pandas dataframe in Python. The name of the dataframe is `df`.
+    You should use the tools below to answer the question posed of you.
+    You must prioritize the result of calculations made on the dataframe over any information from the conversation memory. 
+    If the memory contradicts the calculation, the calculation is always the source of truth.
+    If the user asks for a chart, respond positively while explaining that you can't create charts yet. Then, provide the underlying data or calculations instead. For example: "Baik! Saya belum bisa membuat grafik, tapi berikut data yang anda minta:"
+    This is the memory of the conversation: {conversation_memory}.
+    You must answer in Bahasa Indonesia with a descriptive tone.

@@ -16,5 +16,6 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     JWT_ALGORITHM: str
     RATE_LIMIT: str
+    RAG_PATH: str
 
     model_config = SettingsConfigDict(env_file=".env")

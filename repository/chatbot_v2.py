@@ -3,6 +3,7 @@ from entity.conversation import ConversationalChatbot, ConversationStateV2
 from entity.tools import VectorSearchInput, VectorSearchOutput
 from infra.generative_provider import GenerativeAdapter
 from infra.data_store import PostgresAdapter
+from infra.prompt_loader import PromptLoader
 import logging
 from langgraph.graph import START, END
 from langgraph.graph.state import CompiledStateGraph
@@ -29,6 +30,7 @@ class ChatBotV2Repository:
         self,
         generative_provider: GenerativeAdapter,
         postgres_adapter: PostgresAdapter,
+        prompts_file_path: str = "config-rag.yaml"
     ):
         self.__generative_adapter = generative_provider
         self.__pgvector = postgres_adapter.get_vector_store()
@@ -36,6 +38,7 @@ class ChatBotV2Repository:
         self.__logger = logging.getLogger(__name__)
         self.__chat_states: Dict[str, CompiledStateGraph] = {}
         self.__create_sql_database = postgres_adapter.create_sql_database
+        self.__prompt_loader = PromptLoader(prompts_file_path)
 
     def create_chatbot_v2(self, thread_id: str):
         chatbot = ConversationalChatbot()
@@ -105,26 +108,8 @@ class ChatBotV2Repository:
 
 
     def __create_workflow_routing_prompt(self) -> RunnableSerializable:
-        prompt = ChatPromptTemplate.from_template(
-            """
-                You are a workflow router for a LLM product.
-                You should decide where to route user's request based on conversation and user question.
-                
-                Conversation Memory: {conversation_memory}
-                
-                Given user question and chat conversation you should route user request to either 2 workflows:
-                
-                1. specific_assistance:
-                If user ask about specific knowledge and has correlation to previous conversation, use this workflow.
-                2. sql_assistant:
-                If user ask about either of these {dataset_name} related topics, use this workflow. Fill table_name of the response with one of these table names:{table_name}.
-           
-                You should output either `specific_assistance` and `sql_assistant`.
-
-                Question:
-                {input}
-             """
-        )
+        prompt_template = self.__prompt_loader.get_prompt("workflow_router")
+        prompt = ChatPromptTemplate.from_template(prompt_template)
         return prompt | self.__generative_adapter.chat_model.with_structured_output(RouterOutputV2)
     
     def __create_workflow_routing_chain(self, state: StateV2, config: RunnableConfig) -> StateV2:
@@ -170,26 +155,8 @@ class ChatBotV2Repository:
         return "specific_assistance"    
         
     def __specific_knowledge_agent(self, conversation_memory: str = "") -> Runnable:
-        # Create a dynamic prompt that includes conversation memory
-        system_prompt = f"""
-            Kamu adalah asisten riset yang dapat menggabungkan informasi dari sumber internal (vector_search) dan eksternal (tavily_search, tavily_extract).
-
-            Context dari percakapan sebelumnya: {conversation_memory}
-
-            Aturan kerja:
-            1. SELALU mulai dengan vector_search menggunakan pertanyaan pengguna.
-            2. Evaluasi apakah hasil vector_search cukup untuk menjawab pertanyaan dengan yakin:
-            - Cukup = mengandung fakta atau data relevan yang langsung menjawab pertanyaan.
-            - Kurang = informasi tidak ada, tidak spesifik, atau tidak lengkap.
-            3. Jika kurang, gunakan tavily_search untuk mencari informasi tambahan di web.
-            4. Jika dari tavily_search terdapat URL yang relevan namun perlu isi lebih detail, gunakan tavily_extract.
-            3. Jika kurang, gunakan tavily_search dan tavily_extract untuk mencari informasi tambahan di web
-            5. Gabungkan semua informasi yang ditemukan menjadi satu jawaban terpadu.
-            6. Ambil field `sources` dari `vector_search` untuk mengisi field `references`
-            7. Jika setelah semua langkah jawaban masih belum lengkap atau ambigu, set `needs_clarification=true` dan jelaskan kekurangannya.
-            8. Jika yakin, set `needs_clarification=false`.
-            9. Gunakan context dari percakapan sebelumnya untuk memberikan jawaban yang lebih relevan dan kontekstual.
-        """
+        system_prompt_template = self.__prompt_loader.get_prompt("specific_knowledge_agent")
+        system_prompt = system_prompt_template.format(conversation_memory=conversation_memory)
         
         react_agent = create_react_agent(
             debug=True,            
@@ -255,22 +222,7 @@ class ChatBotV2Repository:
         return "summary_refinement" if should_refine else "store_response"
 
     def __create_initial_summary_chain(self):
-        prompt = ChatPromptTemplate(
-            [
-                (
-                    "human",
-                    """\
-                    Buatkan ringkasan terstruktur dari konteks berikut.
-
-                    ### Perintah ringkasan
-                    1. Maksimum 120 kata, bahasa sama dengan dokumen.
-                    2. Gunakan poin - poin (•) untuk fakta kunci.
-                    3. Tutup dengan "👉 Ringkasan selesai".
-
-                    {context}""",
-                )
-            ]
-        )
+        prompt = self.__prompt_loader.create_chat_prompt("initial_summary", role="human")
         return prompt | self.__generative_adapter.chat_model.with_structured_output(AgentResponseV2)
     
     def __generate_initial_summary(self, state: StateV2, config: RunnableConfig) -> StateV2:
@@ -309,27 +261,7 @@ class ChatBotV2Repository:
             raise
     
     def __create_summary_refinement_chain(self):
-        prompt = ChatPromptTemplate(
-            [
-                (
-                    "human",
-                    """\
-                    Anda diminta *memperbaiki* ringkasan.
-
-                    Ringkasan sementara:
-                    {existing_answer}
-
-                    Konteks tambahan:
-                    {context}
-
-                    ### Instruksi
-                    • Tambahkan fakta penting yang belum tercakup.
-                    • Perbaiki kesalahan, hindari pengulangan.
-                    • Tetap ≤ 120 kata dan tutup dengan "👉 Ringkasan selesai".\
-                    """,
-                )
-            ]
-        )
+        prompt = self.__prompt_loader.create_chat_prompt("summary_refinement", role="human")
         return prompt | self.__generative_adapter.chat_model.with_structured_output(AgentResponseV2)
     
 
@@ -408,16 +340,8 @@ class ChatBotV2Repository:
                         recent_history = messages[-10:] if len(messages) > 10 else messages
                         
                         # Create a simple memory summary using the LLM
-                        memory_prompt = ChatPromptTemplate.from_template("""
-                            Based on the current user question, summarize the most relevant information from the conversation history in 2-3 sentences.
-                            
-                            Current Question: {question}
-                            
-                            Recent Conversation History:
-                            {history}
-                            
-                            Relevant Summary:
-                        """)
+                        memory_prompt_template = self.__prompt_loader.get_prompt("memory_retrieval")
+                        memory_prompt = ChatPromptTemplate.from_template(memory_prompt_template)
                         
                         history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in recent_history])
                         self.__logger.info(f"History text length: {len(history_text)}")
@@ -471,23 +395,8 @@ class ChatBotV2Repository:
                 return state
             
             # Create a simple memory update using the LLM
-            update_prompt = ChatPromptTemplate.from_template("""
-                Update the conversation memory with the new information from this interaction.
-                
-                Current Memory: {current_memory}
-                
-                New Information:
-                - Question: {question}
-                - Answer: {answer}
-                
-                Instructions:
-                1. Integrate the new information with existing memory
-                2. Maintain important context and facts
-                3. Keep the summary concise (3-4 sentences max)
-                4. Focus on information that would be useful for future questions
-                
-                Updated Memory:
-            """)
+            update_prompt_template = self.__prompt_loader.get_prompt("memory_update")
+            update_prompt = ChatPromptTemplate.from_template(update_prompt_template)
             
             # Generate updated memory
             update_chain = update_prompt | self.__generative_adapter.chat_model
@@ -509,47 +418,14 @@ class ChatBotV2Repository:
             }
         
     def __sql_agent(self, db: SQLDatabase, toolkit: SQLDatabaseToolkit, column_metadata: str, conversation_memory: str = "") -> Runnable:
-        system_prompt = f"""
-            You are an agent designed to interact with a SQL database and provide data visualizations.
-
-            Conversation Context: {conversation_memory}
-
-            Important: You must fill *all relevant fields* of the AgentResponseV2 schema.
-
-            Given an input question:
-            1. Consider the conversation context to understand what the user is asking about
-            2. Create a syntactically correct {db.dialect} query to run.
-            3. Look at the results of the query and return the answer in JSON.
-
-            Query guidelines:
-            - Unless the user specifies a specific number of examples, always LIMIT results to at most 5.
-            - You can order the results by a relevant column to return the most interesting examples.
-            - Never query for all the columns from a table; only use relevant columns.
-            - Double check your query before executing it.
-            - If a query fails, rewrite and retry.
-            - DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.).
-            - Always check available tables first, then query the schema of the most relevant ones.
-            - Limit your iteration to as minimal as possible when querying.
-
-            You MUST always return output that conforms to the AgentResponseV2 schema.
-
-            Output guidelines:
-            - *Always return exact number as you get from the SQL query.*
-
-            Table information:
-            {db.get_table_info()}
-
-            Usable table names:
-            {db.get_usable_table_names()}
-
-            Column Metadata:
-            {column_metadata}
-
-            - "answer": natural language explanation
-            - "references": set of URLs (empty if none)
-            - "needs_clarification": boolean
-            - "chart": null
-        """
+        system_prompt_template = self.__prompt_loader.get_prompt("sql_agent")
+        system_prompt = system_prompt_template.format(
+            conversation_memory=conversation_memory,
+            dialect=db.dialect,
+            table_info=db.get_table_info(),
+            usable_table_names=db.get_usable_table_names(),
+            column_metadata=column_metadata
+        )
         react_agent = create_react_agent(
             debug=True,            
             response_format=AgentResponseV2,
@@ -605,41 +481,8 @@ class ChatBotV2Repository:
             )}
 
     def __chart_chain(self) -> Runnable:
-        prompt = ChatPromptTemplate.from_template("""
-            You are a chart generator.  
-            Given only the natural language answer from the database query, generate a valid Vega-Lite v5 chart specification.
-
-            Input:
-            {answer}
-
-            Processing guidelines:
-            - read the answer carefully and understand the data
-            - generate a valid Vega-Lite v5 chart specification based on the answer
-            - if you have different metrics make sure use different colors to differentiate them
-                                                  
-            CRITICAL RULES:                        
-            - Return ONLY a valid JSON object with this exact structure (can be change ONLY need the different metrics colors):                                      
-            {{
-                "chart": {{
-                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                    "autosize": {{"type": "fit", "contains": "padding"}},
-                    "width": "container",
-                    "height": 700, 
-                    "data": {{
-                        "values": [
-                            {{"field1": "value1", "field2": number1}},
-                            {{"field1": "value2", "field2": number2}}
-                        ]
-                    }},
-                    "mark": {{ "type":"chart_type","tooltip": true }},
-                    "encoding": {{
-                        "x": {{"field": "field1", "type": "nominal", "axis": {{"title": "X Axis Title"}}}},
-                        "y": {{"field": "field2", "type": "quantitative", "axis": {{"title": "Y Axis Title"}}}}
-                    }},
-               
-                }}
-            }}
-        """)
+        prompt_template = self.__prompt_loader.get_prompt("chart_generator")
+        prompt = ChatPromptTemplate.from_template(prompt_template)
         return prompt | self.__generative_adapter.chat_model.with_structured_output(ChartData)
     
     def __generate_chart(self, state: StateV2, config: RunnableConfig) -> StateV2:
@@ -704,15 +547,8 @@ class ChatBotV2Repository:
         if dataframe_from_user is not None:
             dataframe_from_user = read_json(StringIO(dataframe_from_user))
         
-        prefix = f"""
-        You are working with a pandas dataframe in Python. The name of the dataframe is `df`.
-        You should use the tools below to answer the question posed of you.
-        You must prioritize the result of calculations made on the dataframe over any information from the conversation memory. 
-        If the memory contradicts the calculation, the calculation is always the source of truth.
-        If the user asks for a chart, respond positively while explaining that you can't create charts yet. Then, provide the underlying data or calculations instead. For example: "Baik! Saya belum bisa membuat grafik, tapi berikut data yang anda minta:"
-        This is the memory of the conversation: {state.get("conversation_memory")}.
-        You must answer in Bahasa Indonesia with a descriptive tone.
-        """
+        prefix_template = self.__prompt_loader.get_prompt("pandas_dataframe_agent")
+        prefix = prefix_template.format(conversation_memory=state.get("conversation_memory"))
 
         agent = create_pandas_dataframe_agent(
             self.__generative_adapter.chat_model, 
